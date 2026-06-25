@@ -1,0 +1,29 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+issueTrackerURL="https://github.com/Yumesumi/Yumesumi-Finance/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+displayURL="https://github.com/Yumesumi/Yumesumi-Finance"
+authors="Yumesumi"
+description='''
+Yumesumi Finance adds Yumesumi Yuan, physical cash, ATM blocks, bank cards, and a server-authoritative bank account system.
+梦澄金融为 Minecraft 加入梦澄元、实体现金、ATM、银行卡与服务端权威银行账户系统。
+'''
+
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"

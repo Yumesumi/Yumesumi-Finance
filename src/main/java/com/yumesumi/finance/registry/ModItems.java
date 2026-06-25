@@ -1,0 +1,33 @@
+package com.yumesumi.finance.registry;
+
+import com.yumesumi.finance.YumesumiFinance;
+import com.yumesumi.finance.item.BankCardItem;
+import com.yumesumi.finance.item.CashItem;
+import com.yumesumi.finance.money.CashDenomination;
+import com.yumesumi.finance.money.CashDenominations;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+public final class ModItems {
+    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(YumesumiFinance.MODID);
+
+    public static final DeferredItem<BlockItem> ATM = ITEMS.registerSimpleBlockItem("atm", ModBlocks.ATM);
+    public static final DeferredItem<BankCardItem> BANK_CARD = ITEMS.register("bank_card",
+            () -> new BankCardItem(new Item.Properties().stacksTo(1)));
+
+    public static final Map<CashDenomination, DeferredItem<CashItem>> CASH = new LinkedHashMap<>();
+
+    static {
+        for (CashDenomination denomination : CashDenominations.ALL) {
+            CASH.put(denomination, ITEMS.register(denomination.id(),
+                    () -> new CashItem(denomination, new Item.Properties().stacksTo(64).rarity(denomination.rarity()))));
+        }
+    }
+
+    private ModItems() {
+    }
+}

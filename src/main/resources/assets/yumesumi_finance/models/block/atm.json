@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "yumesumi_finance:block/atm_side",
+    "north": "yumesumi_finance:block/atm_front",
+    "south": "yumesumi_finance:block/atm_side",
+    "east": "yumesumi_finance:block/atm_side",
+    "west": "yumesumi_finance:block/atm_side",
+    "up": "yumesumi_finance:block/atm_top",
+    "down": "yumesumi_finance:block/atm_side"
+  }
+}

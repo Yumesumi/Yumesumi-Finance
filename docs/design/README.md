@@ -1,0 +1,39 @@
+# 梦澄金融核心设计总览
+
+本文档描述当前核心模块的边界。目标是让每个功能独立演进，避免 GUI、网络包、账户存储和现金算法互相缠绕。
+
+## 模块边界
+
+| 模块 | 目录 | 职责 |
+| --- | --- | --- |
+| API | `com.yumesumi.finance.api` | 暴露低耦合接口，供实现层、接入层或未来附属模组使用 |
+| 货币与现金 | `money`、`money.cash` | 面值定义、金额格式化、实体现金背包操作 |
+| 银行账户 | `bank.account`、`bank.storage` | 账户模型与服务端存档 |
+| 银行业务 | `bank.service` | 存款、取款等服务端用例 |
+| 银行 GUI 接入 | `bank.ui`、`client.gui` | 打开界面、同步快照、客户端展示 |
+| 交易 | `transaction` | 交易类型与结果模型，后续扩展交易流水 |
+| 网络 | `network` | NeoForge 1.21.1 payload 注册和处理 |
+
+## 依赖方向
+
+接入层依赖业务接口，业务层依赖账户仓储接口和现金钱包接口，底层实现不反向依赖 GUI 或网络。
+
+```text
+block / item / network
+        |
+        v
+bank.ui.BankScreenAccessService
+        |
+        v
+api.bank.BankService
+        |
+        +--> api.bank.BankAccountRepository
+        +--> api.money.CashWallet
+```
+
+## 扩展原则
+
+- 新功能先定义接口，再添加实现。
+- 金融金额统一使用 `long cents`，单位为分。
+- 服务端是唯一权威，客户端只发请求和展示快照。
+- GUI 不直接读写账户或玩家背包。
