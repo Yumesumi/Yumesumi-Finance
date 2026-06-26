@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Improved the bank GUI with responsive panel sizing.
+- Transaction history now dynamically adjusts visible rows based on the player's window height.
+
 ## 1.2.0
 
 v1.2.0 focuses on stabilizing the bank core rather than adding broad new gameplay.

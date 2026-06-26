@@ -31,9 +31,14 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 public class BankScreen extends Screen {
-    private static final int PANEL_WIDTH = 380;
-    private static final int PANEL_HEIGHT = 250;
-    private static final int HISTORY_PAGE_SIZE = 4;
+    private static final int MIN_PANEL_WIDTH = 380;
+    private static final int MAX_PANEL_WIDTH = 560;
+    private static final int MIN_PANEL_HEIGHT = 250;
+    private static final int MAX_PANEL_HEIGHT = 420;
+    private static final int PANEL_MARGIN = 16;
+    private static final int CONTENT_PADDING = 18;
+    private static final int BUTTON_HEIGHT = 20;
+    private static final int HISTORY_ROW_HEIGHT = 29;
     private static final DateTimeFormatter HISTORY_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm")
             .withZone(ZoneId.systemDefault());
     private static final int TEXT_PRIMARY = 0xFFFFFFFF;
@@ -41,9 +46,6 @@ public class BankScreen extends Screen {
     private static final int TEXT_MUTED = 0xFFC0C0C0;
     private static final int TEXT_TITLE = 0xFFFFFFA0;
     private static final int TEXT_FAINT = 0x88707070;
-    private static final int HISTORY_COL_TYPE = 24;
-    private static final int HISTORY_COL_AMOUNT = 116;
-    private static final int HISTORY_COL_NOTE = 238;
     private static final int HISTORY_FILTER_WIDTH = 70;
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("\\d+(\\.\\d{1,2})?");
 
@@ -90,17 +92,19 @@ public class BankScreen extends Screen {
         drawVanillaLikeBackground(graphics);
         int left = panelLeft();
         int top = panelTop();
+        int panelWidth = panelWidth();
+        int panelHeight = panelHeight();
 
-        graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xDD000000);
-        graphics.fill(left + 8, top + 8, left + PANEL_WIDTH - 8, top + 34, 0xAA202020);
+        graphics.fill(left, top, left + panelWidth, top + panelHeight, 0xDD000000);
+        graphics.fill(left + 8, top + 8, left + panelWidth - 8, top + 34, 0xAA202020);
         graphics.drawCenteredString(font, title, width / 2, top + 16, TEXT_PRIMARY);
         if (page == Page.HISTORY) {
-            graphics.drawString(font, pageTitle(), left + 18, top + 45, TEXT_TITLE, true);
+            graphics.drawString(font, pageTitle(), left + CONTENT_PADDING, top + 45, TEXT_TITLE, true);
         } else {
-            graphics.drawString(font, Component.translatable("screen.yumesumi_finance.balance"), left + 18, top + 45, TEXT_SECONDARY, true);
+            graphics.drawString(font, Component.translatable("screen.yumesumi_finance.balance"), left + CONTENT_PADDING, top + 45, TEXT_SECONDARY, true);
             graphics.drawString(font, MoneyFormatter.format(balanceCents), left + 92, top + 45, TEXT_PRIMARY, true);
-            graphics.drawString(font, page == Page.MAIN ? welcomeMessage() : message, left + 18, top + 60, TEXT_SECONDARY, true);
-            graphics.drawString(font, pageTitle(), left + 18, top + 82, TEXT_TITLE, true);
+            graphics.drawString(font, page == Page.MAIN ? welcomeMessage() : message, left + CONTENT_PADDING, top + 60, TEXT_SECONDARY, true);
+            graphics.drawString(font, pageTitle(), left + CONTENT_PADDING, top + 82, TEXT_TITLE, true);
         }
 
         if (page == Page.HISTORY) {
@@ -143,64 +147,76 @@ public class BankScreen extends Screen {
     private void buildMainPage() {
         int left = panelLeft();
         int top = panelTop();
-        addMenuButton(left + 48, top + 110, "screen.yumesumi_finance.deposit", Page.DEPOSIT);
-        addMenuButton(left + 202, top + 110, "screen.yumesumi_finance.withdraw", Page.WITHDRAW);
-        addMenuButton(left + 48, top + 146, "screen.yumesumi_finance.transfer", Page.TRANSFER);
-        addMenuButton(left + 202, top + 146, "screen.yumesumi_finance.history", Page.HISTORY);
+        int buttonWidth = Math.min(170, (contentWidth() - 24) / 2);
+        int gap = contentWidth() - buttonWidth * 2;
+        int x1 = left + CONTENT_PADDING;
+        int x2 = x1 + buttonWidth + gap;
+        int y1 = top + Math.max(110, panelHeight() / 2 - 18);
+        int y2 = y1 + 36;
+        addMenuButton(x1, y1, buttonWidth, "screen.yumesumi_finance.deposit", Page.DEPOSIT);
+        addMenuButton(x2, y1, buttonWidth, "screen.yumesumi_finance.withdraw", Page.WITHDRAW);
+        addMenuButton(x1, y2, buttonWidth, "screen.yumesumi_finance.transfer", Page.TRANSFER);
+        addMenuButton(x2, y2, buttonWidth, "screen.yumesumi_finance.history", Page.HISTORY);
     }
 
     private void buildCashPage(boolean deposit) {
         int left = panelLeft();
         int top = panelTop();
-        int startX = left + 18;
+        int startX = left + CONTENT_PADDING;
         int startY = top + 104;
+        int columns = Math.max(3, Math.min(5, contentWidth() / 69));
+        int denominationButtonWidth = Math.max(58, Math.min(76, (contentWidth() - (columns - 1) * 5) / columns));
 
         List<CashDenomination> denominations = CashDenominations.ALL;
         for (int i = 0; i < denominations.size(); i++) {
             CashDenomination denomination = denominations.get(i);
-            int x = startX + (i % 5) * 69;
-            int y = startY + (i / 5) * 24;
+            int x = startX + (i % columns) * (denominationButtonWidth + 5);
+            int y = startY + (i / columns) * 24;
             Component label = Component.translatable("item.yumesumi_finance." + denomination.id());
             addRenderableWidget(Button.builder(label, button -> sendCashAmount(deposit, denomination.valueCents()))
-                    .bounds(x, y, 64, 20)
+                    .bounds(x, y, denominationButtonWidth, BUTTON_HEIGHT)
                     .build());
         }
 
-        int actionY = top + 184;
+        int actionY = Math.min(top + panelHeight() - 44, startY + ((denominations.size() + columns - 1) / columns) * 24 + 14);
+        int inputWidth = Math.max(90, Math.min(150, contentWidth() - 82 - 82 - 58 - 30));
+        int confirmX = left + CONTENT_PADDING + 82 + 10 + inputWidth + 8;
         addRenderableWidget(Button.builder(Component.translatable(deposit ? "screen.yumesumi_finance.deposit_all" : "screen.yumesumi_finance.withdraw_all"),
                         button -> confirmAllCash(deposit))
-                .bounds(left + 18, actionY, 82, 20)
+                .bounds(left + CONTENT_PADDING, actionY, 82, BUTTON_HEIGHT)
                 .build());
 
-        amountBox = new EditBox(font, left + 110, actionY, 96, 20, Component.translatable("screen.yumesumi_finance.amount"));
+        amountBox = new EditBox(font, left + CONTENT_PADDING + 92, actionY, inputWidth, BUTTON_HEIGHT, Component.translatable("screen.yumesumi_finance.amount"));
         amountBox.setHint(Component.translatable("screen.yumesumi_finance.custom_amount_hint"));
         addRenderableWidget(amountBox);
 
         addRenderableWidget(Button.builder(Component.translatable("screen.yumesumi_finance.confirm"), button -> sendCustomAmount(deposit))
-                .bounds(left + 214, actionY, 82, 20)
+                .bounds(confirmX, actionY, 82, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(Component.translatable("screen.yumesumi_finance.back"), button -> switchPage(Page.MAIN))
-                .bounds(left + 304, actionY, 58, 20)
+                .bounds(left + panelWidth() - CONTENT_PADDING - 58, actionY, 58, BUTTON_HEIGHT)
                 .build());
     }
 
     private void buildTransferPage() {
         int left = panelLeft();
         int top = panelTop();
-        targetBox = new EditBox(font, left + 74, top + 104, 210, 20, Component.translatable("screen.yumesumi_finance.transfer_target"));
+        int fieldX = left + CONTENT_PADDING + 56;
+        int fieldWidth = Math.min(300, contentWidth() - 74);
+        targetBox = new EditBox(font, fieldX, top + 104, fieldWidth, BUTTON_HEIGHT, Component.translatable("screen.yumesumi_finance.transfer_target"));
         targetBox.setHint(Component.translatable("screen.yumesumi_finance.transfer_target_hint"));
         targetBox.setMaxLength(64);
         targetBox.setValue(transferTargetText);
         targetBox.setResponder(value -> transferTargetText = value);
         addRenderableWidget(targetBox);
 
-        amountBox = new EditBox(font, left + 74, top + 136, 210, 20, Component.translatable("screen.yumesumi_finance.amount"));
+        amountBox = new EditBox(font, fieldX, top + 136, fieldWidth, BUTTON_HEIGHT, Component.translatable("screen.yumesumi_finance.amount"));
         amountBox.setHint(Component.translatable("screen.yumesumi_finance.custom_amount_hint"));
         amountBox.setValue(transferAmountText);
         amountBox.setResponder(value -> transferAmountText = value);
         addRenderableWidget(amountBox);
 
-        noteBox = new EditBox(font, left + 74, top + 168, 210, 20, Component.translatable("screen.yumesumi_finance.transfer_note"));
+        noteBox = new EditBox(font, fieldX, top + 168, fieldWidth, BUTTON_HEIGHT, Component.translatable("screen.yumesumi_finance.transfer_note"));
         noteBox.setHint(Component.translatable("screen.yumesumi_finance.transfer_note_hint"));
         noteBox.setMaxLength(64);
         noteBox.setValue(transferNoteText);
@@ -208,10 +224,10 @@ public class BankScreen extends Screen {
         addRenderableWidget(noteBox);
 
         addRenderableWidget(Button.builder(Component.translatable("screen.yumesumi_finance.transfer_submit"), button -> confirmTransfer())
-                .bounds(left + 196, top + 200, 88, 20)
+                .bounds(left + panelWidth() - CONTENT_PADDING - 154, top + Math.min(200, panelHeight() - 50), 88, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(Component.translatable("screen.yumesumi_finance.back"), button -> switchPage(Page.MAIN))
-                .bounds(left + 292, top + 200, 58, 20)
+                .bounds(left + panelWidth() - CONTENT_PADDING - 58, top + Math.min(200, panelHeight() - 50), 58, BUTTON_HEIGHT)
                 .build());
     }
 
@@ -219,6 +235,7 @@ public class BankScreen extends Screen {
         int left = panelLeft();
         int top = panelTop();
         int controlY = top + 68;
+        int searchWidth = Math.max(90, contentWidth() - HISTORY_FILTER_WIDTH * 3 - 24);
         addRenderableWidget(Button.builder(directionLabel(), button -> {
                     historyDirection = switch (historyDirection) {
                         case ALL -> TransactionDirection.INCOME;
@@ -228,24 +245,24 @@ public class BankScreen extends Screen {
                     historyPage = 0;
                     rebuildWidgets();
                 })
-                .bounds(left + 18, controlY, HISTORY_FILTER_WIDTH, 20)
+                .bounds(left + CONTENT_PADDING, controlY, HISTORY_FILTER_WIDTH, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(sortLabel(), button -> {
                     historySortField = historySortField == TransactionSortField.TIME ? TransactionSortField.AMOUNT : TransactionSortField.TIME;
                     historyPage = 0;
                     rebuildWidgets();
                 })
-                .bounds(left + 94, controlY, HISTORY_FILTER_WIDTH, 20)
+                .bounds(left + CONTENT_PADDING + 76, controlY, HISTORY_FILTER_WIDTH, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(orderLabel(), button -> {
                     historySortOrder = historySortOrder == TransactionSortOrder.DESC ? TransactionSortOrder.ASC : TransactionSortOrder.DESC;
                     historyPage = 0;
                     rebuildWidgets();
                 })
-                .bounds(left + 170, controlY, HISTORY_FILTER_WIDTH, 20)
+                .bounds(left + CONTENT_PADDING + 152, controlY, HISTORY_FILTER_WIDTH, BUTTON_HEIGHT)
                 .build());
 
-        searchBox = new EditBox(font, left + 246, controlY, 116, 20, Component.translatable("screen.yumesumi_finance.history_search"));
+        searchBox = new EditBox(font, left + panelWidth() - CONTENT_PADDING - searchWidth, controlY, searchWidth, BUTTON_HEIGHT, Component.translatable("screen.yumesumi_finance.history_search"));
         searchBox.setValue(historySearch);
         searchBox.setResponder(value -> {
             historySearch = value;
@@ -258,70 +275,82 @@ public class BankScreen extends Screen {
                     historyPage = Math.max(0, historyPage - 1);
                     rebuildWidgets();
                 })
-                .bounds(left + 18, top + 224, 24, 20)
+                .bounds(left + CONTENT_PADDING, historyFooterY(), 24, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(Component.literal(">"), button -> {
                     historyPage++;
                     clampHistoryPage();
                     rebuildWidgets();
                 })
-                .bounds(left + 48, top + 224, 24, 20)
+                .bounds(left + CONTENT_PADDING + 30, historyFooterY(), 24, BUTTON_HEIGHT)
                 .build());
         addRenderableWidget(Button.builder(Component.translatable("screen.yumesumi_finance.back"), button -> switchPage(Page.MAIN))
-                .bounds(left + 304, top + 224, 58, 20)
+                .bounds(left + panelWidth() - CONTENT_PADDING - 58, historyFooterY(), 58, BUTTON_HEIGHT)
                 .build());
     }
 
     private void renderHistoryRows(GuiGraphics graphics, int left, int top) {
         List<BankTransactionView> rows = filteredTransactions();
-        int from = Math.min(historyPage * HISTORY_PAGE_SIZE, rows.size());
-        int to = Math.min(from + HISTORY_PAGE_SIZE, rows.size());
-        graphics.fill(left + 18, top + 94, left + 362, top + 218, 0x66000000);
+        int rowsPerPage = historyRowsPerPage();
+        int from = Math.min(historyPage * rowsPerPage, rows.size());
+        int to = Math.min(from + rowsPerPage, rows.size());
+        int tableLeft = left + CONTENT_PADDING;
+        int tableTop = historyTableTop();
+        int tableRight = left + panelWidth() - CONTENT_PADDING;
+        int tableBottom = historyTableBottom();
+        graphics.fill(tableLeft, tableTop, tableRight, tableBottom, 0x66000000);
 
         if (rows.isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_empty"), left + PANEL_WIDTH / 2, top + 150, TEXT_MUTED);
+            graphics.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_empty"), left + panelWidth() / 2, (tableTop + tableBottom) / 2, TEXT_MUTED);
         }
 
         for (int i = from; i < to; i++) {
             BankTransactionView view = rows.get(i);
             int row = i - from;
-            int y = top + 99 + row * 29;
+            int y = tableTop + 5 + row * HISTORY_ROW_HEIGHT;
             int color = view.type().income() ? 0xFF80FF80 : 0xFFFF8080;
             String sign = view.type().income() ? "+" : "-";
+            int typeX = historyTypeX(left);
+            int amountX = historyAmountX(left);
+            int noteX = historyNoteX(left);
+            int noteWidth = tableRight - noteX - 4;
             Component type = Component.translatable("transaction.yumesumi_finance." + view.type().name().toLowerCase(Locale.ROOT));
-            graphics.drawString(font, type, left + HISTORY_COL_TYPE, y, TEXT_PRIMARY, true);
-            graphics.drawString(font, sign + MoneyFormatter.format(view.amountCents()), left + HISTORY_COL_AMOUNT, y, color, true);
+            graphics.drawString(font, type, typeX, y, TEXT_PRIMARY, true);
+            graphics.drawString(font, sign + MoneyFormatter.format(view.amountCents()), amountX, y, color, true);
             String note = visibleNote(view.note());
             if (!note.isBlank()) {
-                graphics.drawString(font, fitText(note, 116), left + HISTORY_COL_NOTE, y, TEXT_MUTED, true);
+                graphics.drawString(font, fitText(note, noteWidth), noteX, y, TEXT_MUTED, true);
             }
-            graphics.drawString(font, formatHistoryTime(view.createdTime()), left + HISTORY_COL_TYPE, y + 10, TEXT_MUTED, true);
-            graphics.drawString(font, Component.translatable("screen.yumesumi_finance.history_balance_after", MoneyFormatter.format(view.balanceAfterCents())), left + HISTORY_COL_AMOUNT, y + 10, TEXT_SECONDARY, true);
+            graphics.drawString(font, formatHistoryTime(view.createdTime()), typeX, y + 10, TEXT_MUTED, true);
+            graphics.drawString(font, Component.translatable("screen.yumesumi_finance.history_balance_after", MoneyFormatter.format(view.balanceAfterCents())), amountX, y + 10, TEXT_SECONDARY, true);
             if (!view.counterpartyName().isBlank()) {
-                drawCounterparty(graphics, view, left + HISTORY_COL_NOTE, y + 10);
+                drawCounterparty(graphics, view, noteX, y + 10, noteWidth);
             }
             if (i + 1 < to) {
-                graphics.fill(left + 24, y + 26, left + 356, y + 27, 0x22FFFFFF);
+                graphics.fill(tableLeft + 6, y + 26, tableRight - 6, y + 27, 0x22FFFFFF);
             }
         }
 
-        int totalPages = Math.max(1, (rows.size() + HISTORY_PAGE_SIZE - 1) / HISTORY_PAGE_SIZE);
-        graphics.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_limit_hint"), left + PANEL_WIDTH / 2, top + 212, TEXT_FAINT);
-        graphics.drawString(font, Component.literal((historyPage + 1) + "/" + totalPages + "  " + rows.size() + "/1000"), left + 82, top + 230, TEXT_MUTED, true);
+        int totalPages = Math.max(1, (rows.size() + rowsPerPage - 1) / rowsPerPage);
+        graphics.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_limit_hint"), left + panelWidth() / 2, tableBottom - 6, TEXT_FAINT);
+        graphics.drawString(font, Component.literal((historyPage + 1) + "/" + totalPages + "  " + rows.size() + "/1000"), left + 82, historyFooterY() + 6, TEXT_MUTED, true);
     }
 
     private void renderHistoryHover(GuiGraphics graphics, int left, int top, int mouseX, int mouseY) {
         List<BankTransactionView> rows = filteredTransactions();
-        int from = Math.min(historyPage * HISTORY_PAGE_SIZE, rows.size());
-        int to = Math.min(from + HISTORY_PAGE_SIZE, rows.size());
+        int rowsPerPage = historyRowsPerPage();
+        int from = Math.min(historyPage * rowsPerPage, rows.size());
+        int to = Math.min(from + rowsPerPage, rows.size());
         for (int i = from; i < to; i++) {
             BankTransactionView view = rows.get(i);
             if (view.counterpartyId() == null || view.counterpartyName().isBlank()) {
                 continue;
             }
 
-            int y = top + 99 + (i - from) * 29 + 10;
-            int nameX = counterpartyNameX(view, left + HISTORY_COL_NOTE);
+            int y = historyTableTop() + 5 + (i - from) * HISTORY_ROW_HEIGHT + 10;
+            int noteX = historyNoteX(left);
+            int noteWidth = left + panelWidth() - CONTENT_PADDING - noteX - 4;
+            int nameX = counterpartyNameX(view, noteX);
             int width = font.width(view.counterpartyName());
             if (mouseX >= nameX && mouseX <= nameX + width && mouseY >= y && mouseY <= y + 9) {
                 graphics.renderTooltip(font, Component.literal(view.counterpartyId().toString()), mouseX, mouseY);
@@ -330,11 +359,10 @@ public class BankScreen extends Screen {
 
             String note = visibleNote(view.note());
             if (!note.isBlank()) {
-                String noteText = fitText(note, 116);
-                int noteX = left + HISTORY_COL_NOTE;
-                int noteY = top + 99 + (i - from) * 29;
-                int noteWidth = font.width(noteText);
-                if (mouseX >= noteX && mouseX <= noteX + noteWidth && mouseY >= noteY && mouseY <= noteY + 9) {
+                String noteText = fitText(note, noteWidth);
+                int noteY = historyTableTop() + 5 + (i - from) * HISTORY_ROW_HEIGHT;
+                int renderedNoteWidth = font.width(noteText);
+                if (mouseX >= noteX && mouseX <= noteX + renderedNoteWidth && mouseY >= noteY && mouseY <= noteY + 9) {
                     graphics.renderTooltip(font, Component.literal(note), mouseX, mouseY);
                     return;
                 }
@@ -342,9 +370,9 @@ public class BankScreen extends Screen {
         }
     }
 
-    private void addMenuButton(int x, int y, String key, Page target) {
+    private void addMenuButton(int x, int y, int width, String key, Page target) {
         addRenderableWidget(Button.builder(Component.translatable(key), button -> switchPage(target))
-                .bounds(x, y, 130, 24)
+                .bounds(x, y, width, 24)
                 .build());
     }
 
@@ -443,7 +471,8 @@ public class BankScreen extends Screen {
 
     private void clampHistoryPage() {
         int total = filteredTransactions().size();
-        int maxPage = Math.max(0, (total + HISTORY_PAGE_SIZE - 1) / HISTORY_PAGE_SIZE - 1);
+        int rowsPerPage = historyRowsPerPage();
+        int maxPage = Math.max(0, (total + rowsPerPage - 1) / rowsPerPage - 1);
         historyPage = Math.min(historyPage, maxPage);
     }
 
@@ -525,10 +554,11 @@ public class BankScreen extends Screen {
         }
     }
 
-    private void drawCounterparty(GuiGraphics graphics, BankTransactionView view, int x, int y) {
+    private void drawCounterparty(GuiGraphics graphics, BankTransactionView view, int x, int y, int maxWidth) {
         Component label = counterpartyLabel(view);
         graphics.drawString(font, label, x, y, TEXT_MUTED, true);
-        graphics.drawString(font, view.counterpartyName(), x + font.width(label) + 2, y, TEXT_MUTED, true);
+        int nameX = x + font.width(label) + 2;
+        graphics.drawString(font, fitText(view.counterpartyName(), Math.max(20, maxWidth - font.width(label) - 2)), nameX, y, TEXT_MUTED, true);
     }
 
     private int counterpartyNameX(BankTransactionView view, int x) {
@@ -594,11 +624,61 @@ public class BankScreen extends Screen {
     }
 
     private int panelLeft() {
-        return (width - PANEL_WIDTH) / 2;
+        return (width - panelWidth()) / 2;
     }
 
     private int panelTop() {
-        return (height - PANEL_HEIGHT) / 2;
+        return (height - panelHeight()) / 2;
+    }
+
+    private int panelWidth() {
+        int available = width - PANEL_MARGIN * 2;
+        if (available < MIN_PANEL_WIDTH) {
+            return Math.max(260, available);
+        }
+        return Math.min(available, MAX_PANEL_WIDTH);
+    }
+
+    private int panelHeight() {
+        int available = height - PANEL_MARGIN * 2;
+        if (available < MIN_PANEL_HEIGHT) {
+            return Math.max(210, available);
+        }
+        return Math.min(available, MAX_PANEL_HEIGHT);
+    }
+
+    private int contentWidth() {
+        return panelWidth() - CONTENT_PADDING * 2;
+    }
+
+    private int historyTableTop() {
+        return panelTop() + 94;
+    }
+
+    private int historyFooterY() {
+        return panelTop() + panelHeight() - 26;
+    }
+
+    private int historyTableBottom() {
+        return historyFooterY() - 6;
+    }
+
+    private int historyRowsPerPage() {
+        return Math.max(1, (historyTableBottom() - historyTableTop() - 10) / HISTORY_ROW_HEIGHT);
+    }
+
+    private int historyTypeX(int left) {
+        return left + CONTENT_PADDING + 6;
+    }
+
+    private int historyAmountX(int left) {
+        return left + Math.max(112, panelWidth() / 3);
+    }
+
+    private int historyNoteX(int left) {
+        int preferred = left + Math.max(238, panelWidth() * 5 / 8);
+        int latestReadable = left + panelWidth() - CONTENT_PADDING - 80;
+        return Math.min(preferred, latestReadable);
     }
 
     private enum Page {

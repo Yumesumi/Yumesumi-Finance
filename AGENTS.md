@@ -5,7 +5,7 @@ This file is the fast-start guide for future coding agents. Read it before chang
 ## Project Snapshot
 
 - Project: Yumesumi Finance / 梦澄金融
-- Current version: 1.2.0
+- Current version: 1.2.1
 - Target: Minecraft Java Edition 1.21.1
 - Loader: NeoForge 21.1.x
 - Language: Java 21
@@ -115,6 +115,7 @@ Goal: evolve into a server economy ecosystem if the server scale justifies it.
 - Network bank requests carry a client requestId. The server stores a bounded per-player set of processed request IDs and rejects replays.
 - Deposit/withdraw requests carry `BankAccessChannel`; ledger counterparty text uses it for entries such as `ATM存入`, `ATM取现`, `随身银行存入`, and `随身银行取现`.
 - Transfers to resolvable UUIDs without an existing account fail with `message.yumesumi_finance.transfer.account_not_found` and must not create a receiver account.
+- `BankScreen` uses responsive sizing. History rows per page are calculated from available panel height, not a fixed constant.
 
 When docs disagree, prefer the current code and `docs/design/bank-ledger-and-transfer.md`; `docs/design/transactions.md` still describes an older lightweight transaction stage.
 
@@ -175,7 +176,7 @@ You are maintaining Yumesumi Finance / 梦澄金融, a Minecraft NeoForge 1.21.1
 
 First read AGENTS.md, README.md, and docs/design/*.md. Treat AGENTS.md as the handoff guide and prefer current source code when older docs disagree.
 
-Current version is 1.2.0. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. Do not weaken v1.2 bank-core protections while adding payment gameplay.
+Current version is 1.2.1. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. Do not weaken v1.2 bank-core protections while adding payment gameplay.
 
 Currency is Yumesumi Dollar, code YSD, symbol S$, cents as ¢. Internally all amounts are long cents.
 
