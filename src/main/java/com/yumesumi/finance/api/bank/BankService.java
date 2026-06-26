@@ -1,6 +1,9 @@
 package com.yumesumi.finance.api.bank;
 
 import com.yumesumi.finance.transaction.TransactionResult;
+import com.yumesumi.finance.transaction.TransactionRecord;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -13,5 +16,11 @@ public interface BankService {
 
     TransactionResult deposit(ServerPlayer player, long amountCents);
 
+    TransactionResult depositAll(ServerPlayer player);
+
     TransactionResult withdraw(ServerPlayer player, long amountCents);
+
+    TransactionResult transfer(ServerPlayer player, UUID target, String targetName, long amountCents, String note);
+
+    List<TransactionRecord> recentTransactions(ServerPlayer player);
 }
