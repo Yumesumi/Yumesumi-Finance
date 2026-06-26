@@ -12,8 +12,22 @@ import java.util.UUID;
 public interface BankAccountRepository {
     Optional<BankAccount> find(UUID owner);
 
+    default Optional<BankAccount> find(BankAccountId accountId) {
+        if (accountId == null) {
+            return Optional.empty();
+        }
+        if (accountId.kind() != BankAccountKind.PERSONAL) {
+            return Optional.empty();
+        }
+        return find(accountId.id());
+    }
+
     default long balanceOf(UUID owner) {
         return find(owner).map(BankAccount::balanceCents).orElse(0L);
+    }
+
+    default long balanceOf(BankAccountId accountId) {
+        return find(accountId).map(BankAccount::balanceCents).orElse(0L);
     }
 
     void setBalance(UUID owner, long balanceCents);

@@ -18,7 +18,7 @@ public final class ModCreativeTabs {
             .displayItems((parameters, output) -> {
                 output.accept(ModItems.ATM.get());
                 output.accept(ModItems.BANK_CARD.get());
-                ModItems.CASH.values().forEach(output::accept);
+                ModItems.CASH.values().forEach(item -> output.accept(item.get()));
             })
             .build());
 

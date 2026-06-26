@@ -1,5 +1,6 @@
 package com.yumesumi.finance.api.bank;
 
+import com.yumesumi.finance.bank.BankAccessChannel;
 import com.yumesumi.finance.transaction.TransactionResult;
 import com.yumesumi.finance.transaction.TransactionRecord;
 import java.util.List;
@@ -14,11 +15,11 @@ import net.minecraft.server.level.ServerPlayer;
 public interface BankService {
     long balanceOf(ServerPlayer player);
 
-    TransactionResult deposit(ServerPlayer player, long amountCents);
+    TransactionResult deposit(ServerPlayer player, long amountCents, BankAccessChannel channel);
 
-    TransactionResult depositAll(ServerPlayer player);
+    TransactionResult depositAll(ServerPlayer player, BankAccessChannel channel);
 
-    TransactionResult withdraw(ServerPlayer player, long amountCents);
+    TransactionResult withdraw(ServerPlayer player, long amountCents, BankAccessChannel channel);
 
     TransactionResult transfer(ServerPlayer player, UUID target, String targetName, long amountCents, String note);
 

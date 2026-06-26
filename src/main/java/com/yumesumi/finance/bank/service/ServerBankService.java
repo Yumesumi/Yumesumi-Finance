@@ -4,6 +4,7 @@ import com.yumesumi.finance.api.bank.BankAccountRepository;
 import com.yumesumi.finance.api.bank.BankService;
 import com.yumesumi.finance.api.money.CashWallet;
 import com.yumesumi.finance.api.transaction.TransactionRepository;
+import com.yumesumi.finance.bank.BankAccessChannel;
 import com.yumesumi.finance.bank.storage.BankSavedData;
 import com.yumesumi.finance.money.cash.PlayerCashWallet;
 import com.yumesumi.finance.transaction.TransactionQuery;
@@ -41,13 +42,18 @@ public class ServerBankService implements BankService {
     }
 
     @Override
-    public TransactionResult deposit(ServerPlayer player, long amountCents) {
+    public TransactionResult deposit(ServerPlayer player, long amountCents, BankAccessChannel channel) {
+        channel = normalizeChannel(channel);
         long balance = balanceOf(player);
         if (amountCents <= 0) {
             return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.invalid_amount");
         }
-        if (!cashWallet.remove(player, amountCents)) {
-            return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.not_enough_cash");
+        try {
+            if (!cashWallet.remove(player, amountCents)) {
+                return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.not_enough_cash");
+            }
+        } catch (ArithmeticException exception) {
+            return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.too_large");
         }
 
         long newBalance;
@@ -57,18 +63,29 @@ public class ServerBankService implements BankService {
             cashWallet.give(player, amountCents);
             return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.too_large");
         }
-        accounts.setBalance(player.getUUID(), newBalance);
-        record(player.getUUID(), TransactionType.DEPOSIT, amountCents, newBalance, "", null, "");
+        try {
+            applySingleAccountTransaction(player.getUUID(), TransactionType.DEPOSIT, amountCents, newBalance, channel.depositLedgerName(), null, "");
+        } catch (RuntimeException exception) {
+            cashWallet.give(player, amountCents);
+            throw exception;
+        }
         return TransactionResult.success(TransactionType.DEPOSIT, amountCents, newBalance, "message.yumesumi_finance.deposit.success");
     }
 
     @Override
-    public TransactionResult depositAll(ServerPlayer player) {
-        return deposit(player, cashWallet.count(player));
+    public TransactionResult depositAll(ServerPlayer player, BankAccessChannel channel) {
+        long amountCents;
+        try {
+            amountCents = cashWallet.count(player);
+        } catch (ArithmeticException exception) {
+            return TransactionResult.failure(TransactionType.DEPOSIT, Long.MAX_VALUE, balanceOf(player), "message.yumesumi_finance.deposit.too_large");
+        }
+        return deposit(player, amountCents, channel);
     }
 
     @Override
-    public TransactionResult withdraw(ServerPlayer player, long amountCents) {
+    public TransactionResult withdraw(ServerPlayer player, long amountCents, BankAccessChannel channel) {
+        channel = normalizeChannel(channel);
         long balance = balanceOf(player);
         if (amountCents <= 0) {
             return TransactionResult.failure(TransactionType.WITHDRAW, amountCents, balance, "message.yumesumi_finance.withdraw.invalid_amount");
@@ -78,9 +95,13 @@ public class ServerBankService implements BankService {
         }
 
         long newBalance = balance - amountCents;
-        accounts.setBalance(player.getUUID(), newBalance);
-        cashWallet.give(player, amountCents);
-        record(player.getUUID(), TransactionType.WITHDRAW, amountCents, newBalance, "", null, "");
+        applySingleAccountTransaction(player.getUUID(), TransactionType.WITHDRAW, amountCents, newBalance, channel.withdrawLedgerName(), null, "");
+        try {
+            cashWallet.give(player, amountCents);
+        } catch (RuntimeException exception) {
+            accounts.setBalance(player.getUUID(), balance);
+            throw exception;
+        }
         return TransactionResult.success(TransactionType.WITHDRAW, amountCents, newBalance, "message.yumesumi_finance.withdraw.success");
     }
 
@@ -95,6 +116,9 @@ public class ServerBankService implements BankService {
         }
         if (player.getUUID().equals(target)) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.self");
+        }
+        if (accounts.find(target).isEmpty()) {
+            return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.account_not_found");
         }
         if (balance < amountCents) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.not_enough_balance");
@@ -112,16 +136,39 @@ public class ServerBankService implements BankService {
         String senderName = player.getGameProfile().getName();
         String receiverName = targetName == null || targetName.isBlank() ? target.toString() : targetName;
         String safeNote = sanitizeNote(note);
-        accounts.setBalance(player.getUUID(), senderBalance);
-        accounts.setBalance(target, newReceiverBalance);
-        record(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, receiverName, target, safeNote);
-        record(target, TransactionType.TRANSFER_IN, amountCents, newReceiverBalance, senderName, player.getUUID(), safeNote);
+        applyTransferTransaction(player.getUUID(), target, amountCents, senderBalance, newReceiverBalance, senderName, receiverName, safeNote);
         return TransactionResult.success(TransactionType.TRANSFER_OUT, amountCents, senderBalance, "message.yumesumi_finance.transfer.success");
     }
 
     @Override
     public List<TransactionRecord> recentTransactions(ServerPlayer player) {
         return transactions.find(player.getUUID(), TransactionQuery.latest());
+    }
+
+    private void applySingleAccountTransaction(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
+        long originalBalance = accounts.balanceOf(owner);
+        accounts.setBalance(owner, balanceAfterCents);
+        try {
+            record(owner, type, amountCents, balanceAfterCents, counterpartyName, counterpartyId, note);
+        } catch (RuntimeException exception) {
+            accounts.setBalance(owner, originalBalance);
+            throw exception;
+        }
+    }
+
+    private void applyTransferTransaction(UUID sender, UUID receiver, long amountCents, long senderBalance, long receiverBalance, String senderName, String receiverName, String note) {
+        long originalSenderBalance = accounts.balanceOf(sender);
+        long originalReceiverBalance = accounts.balanceOf(receiver);
+        accounts.setBalance(sender, senderBalance);
+        try {
+            accounts.setBalance(receiver, receiverBalance);
+            record(sender, TransactionType.TRANSFER_OUT, amountCents, senderBalance, receiverName, receiver, note);
+            record(receiver, TransactionType.TRANSFER_IN, amountCents, receiverBalance, senderName, sender, note);
+        } catch (RuntimeException exception) {
+            accounts.setBalance(sender, originalSenderBalance);
+            accounts.setBalance(receiver, originalReceiverBalance);
+            throw exception;
+        }
     }
 
     private void record(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
@@ -141,5 +188,9 @@ public class ServerBankService implements BankService {
     private static String sanitizeNote(String note) {
         String trimmed = note == null ? "" : note.trim();
         return trimmed.length() <= 64 ? trimmed : trimmed.substring(0, 64);
+    }
+
+    private static BankAccessChannel normalizeChannel(BankAccessChannel channel) {
+        return channel == null ? BankAccessChannel.ATM : channel;
     }
 }

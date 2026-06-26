@@ -3,6 +3,7 @@ package com.yumesumi.finance.client.gui;
 import com.yumesumi.finance.money.CashDenomination;
 import com.yumesumi.finance.money.CashDenominations;
 import com.yumesumi.finance.money.MoneyFormatter;
+import com.yumesumi.finance.bank.BankAccessChannel;
 import com.yumesumi.finance.network.payload.BankSnapshotPayload;
 import com.yumesumi.finance.network.payload.BankTransactionView;
 import com.yumesumi.finance.network.payload.DepositAllRequestPayload;
@@ -63,6 +64,8 @@ public class BankScreen extends Screen {
     private String transferAmountText = "";
     private String transferNoteText = "";
     private boolean transferRequestPending;
+    private BankAccessChannel currentAccessChannel = BankAccessChannel.ATM;
+    private long requestCounter = System.nanoTime() & Long.MAX_VALUE;
 
     public BankScreen(BankSnapshotPayload payload) {
         super(Component.translatable("screen.yumesumi_finance.bank"));
@@ -347,9 +350,9 @@ public class BankScreen extends Screen {
 
     private void sendCashAmount(boolean deposit, long amountCents) {
         if (deposit) {
-            PacketDistributor.sendToServer(new DepositRequestPayload(amountCents));
+            PacketDistributor.sendToServer(new DepositRequestPayload(nextRequestId(), currentAccessChannel, amountCents));
         } else {
-            PacketDistributor.sendToServer(new WithdrawRequestPayload(amountCents));
+            PacketDistributor.sendToServer(new WithdrawRequestPayload(nextRequestId(), currentAccessChannel, amountCents));
         }
     }
 
@@ -382,7 +385,9 @@ public class BankScreen extends Screen {
             minecraft.setScreen(this);
             if (confirmed) {
                 transferRequestPending = true;
-                PacketDistributor.sendToServer(new TransferRequestPayload(target, amount, note));
+                message = Component.translatable("screen.yumesumi_finance.transfer_loading");
+                minecraft.setScreen(new TransferLoadingScreen(this));
+                PacketDistributor.sendToServer(new TransferRequestPayload(nextRequestId(), currentAccessChannel, target, amount, note));
             }
         }, Component.translatable("screen.yumesumi_finance.transfer_confirm_title"),
                 Component.translatable("screen.yumesumi_finance.transfer_confirm", MoneyFormatter.format(amount), target)));
@@ -416,6 +421,7 @@ public class BankScreen extends Screen {
     private void apply(BankSnapshotPayload payload) {
         balanceCents = payload.balanceCents();
         message = payload.message();
+        currentAccessChannel = payload.channel();
         transactions = payload.transactions();
     }
 
@@ -424,10 +430,13 @@ public class BankScreen extends Screen {
             return;
         }
 
-        transferAmountText = "";
         if (payload.success()) {
             transferTargetText = "";
+            transferAmountText = "";
             transferNoteText = "";
+        } else if ("message.yumesumi_finance.transfer.account_not_found".equals(payload.messageKey())
+                || "message.yumesumi_finance.transfer.target_not_found".equals(payload.messageKey())) {
+            transferTargetText = "";
         }
         transferRequestPending = false;
     }
@@ -483,9 +492,9 @@ public class BankScreen extends Screen {
                 return;
             }
             if (deposit) {
-                PacketDistributor.sendToServer(new DepositAllRequestPayload());
+                PacketDistributor.sendToServer(new DepositAllRequestPayload(nextRequestId(), currentAccessChannel));
             } else {
-                PacketDistributor.sendToServer(new WithdrawRequestPayload(balanceCents));
+                PacketDistributor.sendToServer(new WithdrawRequestPayload(nextRequestId(), currentAccessChannel, balanceCents));
             }
         }, Component.translatable(deposit ? "screen.yumesumi_finance.deposit_all_confirm_title" : "screen.yumesumi_finance.withdraw_all_confirm_title"),
                 Component.translatable(deposit ? "screen.yumesumi_finance.deposit_all_confirm" : "screen.yumesumi_finance.withdraw_all_confirm", MoneyFormatter.format(balanceCents))));
@@ -517,18 +526,23 @@ public class BankScreen extends Screen {
     }
 
     private void drawCounterparty(GuiGraphics graphics, BankTransactionView view, int x, int y) {
-        Component label = Component.translatable(view.type() == TransactionType.TRANSFER_IN
-                ? "screen.yumesumi_finance.history_from"
-                : "screen.yumesumi_finance.history_to");
+        Component label = counterpartyLabel(view);
         graphics.drawString(font, label, x, y, TEXT_MUTED, true);
         graphics.drawString(font, view.counterpartyName(), x + font.width(label) + 2, y, TEXT_MUTED, true);
     }
 
     private int counterpartyNameX(BankTransactionView view, int x) {
-        Component label = Component.translatable(view.type() == TransactionType.TRANSFER_IN
-                ? "screen.yumesumi_finance.history_from"
-                : "screen.yumesumi_finance.history_to");
+        Component label = counterpartyLabel(view);
         return x + font.width(label) + 2;
+    }
+
+    private Component counterpartyLabel(BankTransactionView view) {
+        return switch (view.type()) {
+            case TRANSFER_IN -> Component.translatable("screen.yumesumi_finance.history_from");
+            case TRANSFER_OUT -> Component.translatable("screen.yumesumi_finance.history_to");
+            case DEPOSIT -> Component.translatable("screen.yumesumi_finance.history_source");
+            case WITHDRAW -> Component.translatable("screen.yumesumi_finance.history_destination");
+        };
     }
 
     private boolean matchesHistorySearch(BankTransactionView view, String search) {
@@ -571,6 +585,14 @@ public class BankScreen extends Screen {
         graphics.fill(0, 0, width, height, 0xC0202020);
     }
 
+    private long nextRequestId() {
+        requestCounter++;
+        if (requestCounter <= 0) {
+            requestCounter = 1;
+        }
+        return requestCounter;
+    }
+
     private int panelLeft() {
         return (width - PANEL_WIDTH) / 2;
     }
@@ -585,5 +607,30 @@ public class BankScreen extends Screen {
         WITHDRAW,
         TRANSFER,
         HISTORY
+    }
+
+    public static final class TransferLoadingScreen extends Screen {
+        private final BankScreen parent;
+
+        private TransferLoadingScreen(BankScreen parent) {
+            super(Component.translatable("screen.yumesumi_finance.transfer_loading"));
+            this.parent = parent;
+        }
+
+        public BankScreen parent() {
+            return parent;
+        }
+
+        @Override
+        public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            renderBackground(graphics, mouseX, mouseY, partialTick);
+            graphics.drawCenteredString(font, title, width / 2, height / 2 - 8, TEXT_PRIMARY);
+            super.render(graphics, mouseX, mouseY, partialTick);
+        }
+
+        @Override
+        public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            graphics.fill(0, 0, width, height, 0xC0202020);
+        }
     }
 }

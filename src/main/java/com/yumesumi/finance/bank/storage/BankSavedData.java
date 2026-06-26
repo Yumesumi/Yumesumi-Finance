@@ -33,6 +33,7 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
     private static final String DATA_NAME = "yumesumi_finance_bank";
     private final Map<UUID, BankAccount> accounts = new HashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
+    private final Map<UUID, List<TransactionRecord>> transactionsByOwner = new HashMap<>();
 
     public static BankSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(
@@ -46,15 +47,18 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
         ListTag accountsTag = tag.getList("accounts", Tag.TAG_COMPOUND);
         for (int i = 0; i < accountsTag.size(); i++) {
             CompoundTag accountTag = accountsTag.getCompound(i);
+            if (!accountTag.hasUUID("owner")) {
+                continue;
+            }
             UUID owner = accountTag.getUUID("owner");
-            long balance = accountTag.getLong("balance_cents");
+            long balance = Math.max(0L, accountTag.getLong("balance_cents"));
             data.accounts.put(owner, new BankAccount(owner, balance));
         }
 
         ListTag transactionsTag = tag.getList("transactions", Tag.TAG_COMPOUND);
         for (int i = 0; i < transactionsTag.size(); i++) {
             CompoundTag transactionTag = transactionsTag.getCompound(i);
-            data.transactions.add(readTransaction(transactionTag));
+            readTransaction(transactionTag).ifPresent(data::addTransaction);
         }
         return data;
     }
@@ -85,21 +89,30 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
 
     @Override
     public void setBalance(UUID owner, long balanceCents) {
+        if (owner == null) {
+            throw new IllegalArgumentException("Account owner cannot be null");
+        }
+        if (balanceCents < 0) {
+            throw new IllegalArgumentException("Account balance cannot be negative");
+        }
         accounts.put(owner, new BankAccount(owner, balanceCents));
         setDirty();
     }
 
     @Override
     public void append(TransactionRecord record) {
-        transactions.add(record);
+        addTransaction(record);
         pruneOwner(record.owner());
         setDirty();
     }
 
     @Override
     public List<TransactionRecord> find(UUID owner, TransactionQuery query) {
-        Stream<TransactionRecord> stream = transactions.stream()
-                .filter(record -> record.owner().equals(owner));
+        if (owner == null) {
+            return List.of();
+        }
+
+        Stream<TransactionRecord> stream = transactionsByOwner.getOrDefault(owner, List.of()).stream();
 
         if (query.direction() == TransactionDirection.INCOME) {
             stream = stream.filter(TransactionRecord::income);
@@ -123,9 +136,21 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
     }
 
     private static boolean matches(TransactionRecord record, String searchText) {
-        return record.type().name().toLowerCase().contains(searchText)
-                || record.counterpartyName().toLowerCase().contains(searchText)
-                || record.note().toLowerCase().contains(searchText);
+        return record.counterpartyName().toLowerCase().contains(searchText)
+                || counterpartyIdText(record).contains(searchText)
+                || record.note().toLowerCase().contains(searchText)
+                || amountText(record).contains(searchText);
+    }
+
+    private static String counterpartyIdText(TransactionRecord record) {
+        return record.counterpartyId() == null ? "" : record.counterpartyId().toString().toLowerCase();
+    }
+
+    private static String amountText(TransactionRecord record) {
+        long cents = record.amountCents();
+        long yuan = cents / 100L;
+        long remain = Math.abs(cents % 100L);
+        return Long.toString(cents) + " " + yuan + "." + (remain < 10 ? "0" : "") + remain;
     }
 
     private static Comparator<TransactionRecord> comparator(TransactionSortField sortField) {
@@ -138,20 +163,29 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
     }
 
     private void pruneOwner(UUID owner) {
-        long count = transactions.stream()
-                .filter(record -> record.owner().equals(owner))
-                .count();
-        long extra = count - TransactionRepository.MAX_VISIBLE_RECORDS;
+        List<TransactionRecord> ownerTransactions = transactionsByOwner.get(owner);
+        if (ownerTransactions == null) {
+            return;
+        }
+        int extra = ownerTransactions.size() - TransactionRepository.MAX_VISIBLE_RECORDS;
         if (extra <= 0) {
             return;
         }
 
-        List<TransactionRecord> oldest = transactions.stream()
-                .filter(record -> record.owner().equals(owner))
+        List<TransactionRecord> oldest = ownerTransactions.stream()
                 .sorted(Comparator.comparingLong(TransactionRecord::createdGameTime))
                 .limit(extra)
                 .toList();
         transactions.removeAll(oldest);
+        ownerTransactions.removeAll(oldest);
+        if (ownerTransactions.isEmpty()) {
+            transactionsByOwner.remove(owner);
+        }
+    }
+
+    private void addTransaction(TransactionRecord record) {
+        transactions.add(record);
+        transactionsByOwner.computeIfAbsent(record.owner(), ignored -> new ArrayList<>()).add(record);
     }
 
     private static CompoundTag writeTransaction(TransactionRecord record) {
@@ -170,18 +204,25 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
         return tag;
     }
 
-    private static TransactionRecord readTransaction(CompoundTag tag) {
+    private static Optional<TransactionRecord> readTransaction(CompoundTag tag) {
+        if (!tag.hasUUID("id") || !tag.hasUUID("owner")) {
+            return Optional.empty();
+        }
         UUID counterpartyId = tag.hasUUID("counterparty_id") ? tag.getUUID("counterparty_id") : null;
-        return new TransactionRecord(
-                tag.getUUID("id"),
-                tag.getUUID("owner"),
-                TransactionType.valueOf(tag.getString("type")),
-                tag.getLong("amount_cents"),
-                tag.getLong("balance_after_cents"),
-                tag.getLong("created_game_time"),
-                tag.getString("counterparty_name"),
-                counterpartyId,
-                tag.getString("note")
-        );
+        try {
+            return Optional.of(new TransactionRecord(
+                    tag.getUUID("id"),
+                    tag.getUUID("owner"),
+                    TransactionType.valueOf(tag.getString("type")),
+                    tag.getLong("amount_cents"),
+                    Math.max(0L, tag.getLong("balance_after_cents")),
+                    tag.getLong("created_game_time"),
+                    tag.getString("counterparty_name"),
+                    counterpartyId,
+                    tag.getString("note")
+            ));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
     }
 }

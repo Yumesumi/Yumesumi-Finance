@@ -13,6 +13,12 @@ public final class BankScreenBridge {
             bankScreen.update(payload);
             return;
         }
+        if (minecraft.screen instanceof BankScreen.TransferLoadingScreen loadingScreen) {
+            BankScreen bankScreen = loadingScreen.parent();
+            bankScreen.update(payload);
+            minecraft.setScreen(bankScreen);
+            return;
+        }
         minecraft.setScreen(new BankScreen(payload));
     }
 }

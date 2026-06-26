@@ -57,6 +57,8 @@ If a name cannot be resolved, the transfer fails with a normal bank snapshot mes
 
 - Current balance.
 - User-facing message.
+- Message translation key, so the client can react to specific failures without parsing display text.
+- Bank access channel, used by future requests to preserve ATM/card context.
 - Up to 1000 recent ledger rows.
 
 The GUI filters and sorts the received rows locally for fast interaction. History search intentionally matches only counterparty name, counterparty UUID, note text, and the transaction amount. It does not search transaction type labels or timestamps.
@@ -65,6 +67,9 @@ The GUI filters and sorts the received rows locally for fast interaction. Histor
 
 - Keep money values in `long cents`.
 - Keep GUI and payload code read-only: they should never write balances directly.
+- Every mutating request payload must carry a positive `requestId`; server handlers reject replayed IDs per player.
+- Deposit and withdraw requests must carry `BankAccessChannel`, currently `ATM` or `CARD`.
+- Transfers to resolved UUIDs without existing accounts must fail with `message.yumesumi_finance.transfer.account_not_found`; do not create receiver accounts implicitly.
 - Add new business operations to `BankService` first, then implement them in `ServerBankService`.
 - Add new persisted transaction fields through `BankSavedData` load/save methods with backwards-compatible defaults.
 - Keep player or profile resolution in `bank.transfer`, not in the screen.
