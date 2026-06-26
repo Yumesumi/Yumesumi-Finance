@@ -58,14 +58,14 @@ public final class BankScreenAccessService {
         Component amount = Component.literal(MoneyFormatter.format(result.amountCents()));
         Component message = Component.translatable(result.messageKey(), amount, target);
         BankService bankService = service(player);
-        PacketDistributor.sendToPlayer(player, BankSnapshotPayload.of(result.balanceCents(), message.getString(), result.success(), bankService.recentTransactions(player)));
+        PacketDistributor.sendToPlayer(player, BankSnapshotPayload.of(result.balanceCents(), message, result.success(), bankService.recentTransactions(player)));
     }
 
     private static void sendSnapshot(ServerPlayer player, String messageKey) {
         BankService bankService = service(player);
         PacketDistributor.sendToPlayer(player, BankSnapshotPayload.of(
                 bankService.balanceOf(player),
-                Component.translatable(messageKey).getString(),
+                Component.translatable(messageKey),
                 bankService.recentTransactions(player)
         ));
     }

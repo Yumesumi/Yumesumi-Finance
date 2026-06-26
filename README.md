@@ -2,7 +2,7 @@
 
 Yumesumi Finance 是一个基于 **Minecraft NeoForge 1.21.1** 的金融系统模组。它为游戏加入梦澄元、实体现金、ATM、银行卡、银行账户、交易明细和玩家转账，并为后续利息、理财、股票、多币种等系统预留扩展空间。
 
-当前版本：**1.1.0**
+当前版本：**1.1.1**
 
 ## 功能
 
@@ -30,6 +30,7 @@ Yumesumi Finance 是一个基于 **Minecraft NeoForge 1.21.1** 的金融系统�
   - 悬浮玩家名显示 UUID，悬浮备注显示全文。
 - 服务端权威账户数据，基于 `SavedData` 保存。
 - 使用 NeoForge 1.21.1 payload 网络系统。
+- 银行界面消息使用客户端本地语言渲染，专用服务器不会把提示文本固定成英文。
 - 预留自定义现金数据组件，可扩展纪念钞或活动货币。
 
 ## 开发环境
@@ -37,11 +38,13 @@ Yumesumi Finance 是一个基于 **Minecraft NeoForge 1.21.1** 的金融系统�
 | 项目 | 版本 |
 | --- | --- |
 | Minecraft | 1.21.1 |
-| NeoForge | 21.1.234 |
+| NeoForge | 21.1.200 或更高 |
 | Java | 21 |
 | Gradle | 仓库内 Wrapper |
 
 ## 构建与运行
+
+推荐使用 NeoForge **21.1.200+** 的 Minecraft 1.21.1 环境。若服务器核心使用更高的 21.1.x 版本，通常无需重新构建。
 
 Windows 构建：
 

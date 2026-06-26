@@ -52,7 +52,7 @@ public class BankScreen extends Screen {
     private TransactionSortOrder historySortOrder = TransactionSortOrder.DESC;
     private int historyPage;
     private long balanceCents;
-    private String message;
+    private Component message = Component.empty();
     private List<BankTransactionView> transactions = List.of();
     private EditBox amountBox;
     private EditBox targetBox;
@@ -96,7 +96,7 @@ public class BankScreen extends Screen {
         } else {
             graphics.drawString(font, Component.translatable("screen.yumesumi_finance.balance"), left + 18, top + 45, TEXT_SECONDARY, true);
             graphics.drawString(font, MoneyFormatter.format(balanceCents), left + 92, top + 45, TEXT_PRIMARY, true);
-            graphics.drawString(font, page == Page.MAIN ? welcomeMessage() : Component.literal(message), left + 18, top + 60, TEXT_SECONDARY, true);
+            graphics.drawString(font, page == Page.MAIN ? welcomeMessage() : message, left + 18, top + 60, TEXT_SECONDARY, true);
             graphics.drawString(font, pageTitle(), left + 18, top + 82, TEXT_TITLE, true);
         }
 
@@ -357,7 +357,7 @@ public class BankScreen extends Screen {
         try {
             sendCashAmount(deposit, parseValidAmount(amountBox.getValue()));
         } catch (NumberFormatException exception) {
-            message = Component.translatable("screen.yumesumi_finance.invalid_amount").getString();
+            message = Component.translatable("screen.yumesumi_finance.invalid_amount");
         }
     }
 
@@ -367,12 +367,12 @@ public class BankScreen extends Screen {
         try {
             amount = parseValidAmount(amountBox.getValue());
         } catch (NumberFormatException exception) {
-            message = Component.translatable("screen.yumesumi_finance.invalid_amount").getString();
+            message = Component.translatable("screen.yumesumi_finance.invalid_amount");
             return;
         }
 
         if (target.isEmpty()) {
-            message = Component.translatable("screen.yumesumi_finance.invalid_target").getString();
+            message = Component.translatable("screen.yumesumi_finance.invalid_target");
             return;
         }
 
@@ -472,7 +472,7 @@ public class BankScreen extends Screen {
 
     private void confirmAllCash(boolean deposit) {
         if (!deposit && balanceCents <= 0) {
-            message = Component.translatable("screen.yumesumi_finance.invalid_amount").getString();
+            message = Component.translatable("screen.yumesumi_finance.invalid_amount");
             return;
         }
 
