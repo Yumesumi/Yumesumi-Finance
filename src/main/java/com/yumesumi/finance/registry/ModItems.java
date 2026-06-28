@@ -1,6 +1,7 @@
 package com.yumesumi.finance.registry;
 
 import com.yumesumi.finance.YumesumiFinance;
+import com.yumesumi.finance.item.BankAdminCardItem;
 import com.yumesumi.finance.item.BankCardItem;
 import com.yumesumi.finance.item.CashItem;
 import com.yumesumi.finance.money.CashDenomination;
@@ -16,8 +17,11 @@ public final class ModItems {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(YumesumiFinance.MODID);
 
     public static final DeferredItem<BlockItem> ATM = ITEMS.registerSimpleBlockItem("atm", ModBlocks.ATM);
+    public static final DeferredItem<BlockItem> ENTERPRISE_REGISTRATION_TERMINAL = ITEMS.registerSimpleBlockItem("enterprise_registration_terminal", ModBlocks.ENTERPRISE_REGISTRATION_TERMINAL);
     public static final DeferredItem<BankCardItem> BANK_CARD = ITEMS.register("bank_card",
             () -> new BankCardItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredItem<BankAdminCardItem> BANK_ADMIN_CARD = ITEMS.register("bank_admin_card",
+            () -> new BankAdminCardItem(new Item.Properties().stacksTo(1)));
 
     public static final Map<CashDenomination, DeferredItem<CashItem>> CASH = new LinkedHashMap<>();
 

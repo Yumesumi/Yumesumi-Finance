@@ -1,6 +1,7 @@
 package com.yumesumi.finance.bank.transfer;
 
 import com.mojang.authlib.GameProfile;
+import com.yumesumi.finance.bank.storage.BankSavedData;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.server.MinecraftServer;
@@ -14,6 +15,9 @@ public final class TransferTargetResolver {
         String target = rawTarget == null ? "" : rawTarget.trim();
         if (target.isEmpty()) {
             return Optional.empty();
+        }
+        if (BankSavedData.TREASURY_NAME.equalsIgnoreCase(target)) {
+            return Optional.of(new TransferTarget(BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME));
         }
 
         try {

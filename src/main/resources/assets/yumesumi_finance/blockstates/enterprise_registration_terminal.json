@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "yumesumi_finance:block/enterprise_registration_terminal"
+    }
+  }
+}

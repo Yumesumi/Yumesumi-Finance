@@ -37,7 +37,7 @@ public class BankCardItem extends Item {
         String playerName = player.getGameProfile().getName();
         BankCardData cardData = new BankCardData(player.getUUID(), playerName);
         stack.set(ModDataComponents.BANK_CARD.get(), cardData);
-        stack.set(DataComponents.CUSTOM_NAME, Component.literal(playerName + "的梦澄银行卡"));
+        stack.set(DataComponents.CUSTOM_NAME, Component.translatable("item.yumesumi_finance.bank_card.bound_name", playerName));
         markBound(stack);
         return cardData;
     }

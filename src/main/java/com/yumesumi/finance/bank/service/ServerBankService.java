@@ -117,6 +117,9 @@ public class ServerBankService implements BankService {
         if (player.getUUID().equals(target)) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.self");
         }
+        if (BankSavedData.TREASURY_UUID.equals(target)) {
+            return transferToTreasury(player, amountCents, note);
+        }
         if (accounts.find(target).isEmpty()) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.account_not_found");
         }
@@ -137,6 +140,34 @@ public class ServerBankService implements BankService {
         String receiverName = targetName == null || targetName.isBlank() ? target.toString() : targetName;
         String safeNote = sanitizeNote(note);
         applyTransferTransaction(player.getUUID(), target, amountCents, senderBalance, newReceiverBalance, senderName, receiverName, safeNote);
+        return TransactionResult.success(TransactionType.TRANSFER_OUT, amountCents, senderBalance, "message.yumesumi_finance.transfer.success");
+    }
+
+    private TransactionResult transferToTreasury(ServerPlayer player, long amountCents, String note) {
+        long balance = balanceOf(player);
+        if (balance < amountCents) {
+            return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.not_enough_balance");
+        }
+        if (!(accounts instanceof BankSavedData savedData)) {
+            return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.account_not_found");
+        }
+
+        long senderBalance = balance - amountCents;
+        String safeNote = sanitizeNote(note);
+        long originalSenderBalance = accounts.balanceOf(player.getUUID());
+        boolean treasuryChanged = false;
+        accounts.setBalance(player.getUUID(), senderBalance);
+        try {
+            savedData.addToTreasury(amountCents, player.getGameProfile().getName(), safeNote.isBlank() ? "个人转账至国库" : safeNote);
+            treasuryChanged = true;
+            record(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, BankSavedData.TREASURY_NAME, BankSavedData.TREASURY_UUID, safeNote);
+        } catch (RuntimeException exception) {
+            accounts.setBalance(player.getUUID(), originalSenderBalance);
+            if (treasuryChanged) {
+                savedData.addToTreasury(-amountCents, "SYSTEM", "个人转账至国库回滚");
+            }
+            throw exception;
+        }
         return TransactionResult.success(TransactionType.TRANSFER_OUT, amountCents, senderBalance, "message.yumesumi_finance.transfer.success");
     }
 

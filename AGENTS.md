@@ -5,7 +5,7 @@ This file is the fast-start guide for future coding agents. Read it before chang
 ## Project Snapshot
 
 - Project: Yumesumi Finance / 梦澄金融
-- Current version: 1.2.1
+- Current version: 1.2.6
 - Target: Minecraft Java Edition 1.21.1
 - Loader: NeoForge 21.1.x
 - Language: Java 21
@@ -15,7 +15,7 @@ This file is the fast-start guide for future coding agents. Read it before chang
 - Minor unit: cent, displayed as `¢`
 - Internal money representation: `long cents`; never use `double` for financial math.
 
-The mod adds a server-authoritative financial system: physical cash, bank cards, ATM access, bank accounts, deposits, withdrawals, player transfer, and transaction history. Future versions expand this into payment, organization accounts, interest, loans, and wider economy systems.
+The mod adds a server-authoritative financial system: physical cash, bank cards, ATM access, bank accounts, deposits, withdrawals, player transfer, transaction history, bank admin controls, inbox messages, and first-pass enterprise accounts. Future versions expand this into payment, richer organization accounts, interest, loans, and wider economy systems.
 
 ## Roadmap Context
 
@@ -79,7 +79,7 @@ Goal: evolve into a server economy ecosystem if the server scale justifies it.
 - Client GUI only sends requests and displays server snapshots.
 - GUI, item, block, and network code must not mutate balances directly.
 - Business operations belong in `api.bank.BankService` and `bank.service.ServerBankService`.
-- Persistent balances and ledger records are owned by `bank.storage.BankSavedData`.
+- Personal balances and personal ledger records are owned by `bank.storage.BankSavedData`; enterprise accounts and enterprise ledgers are owned by `bank.storage.EnterpriseSavedData`.
 - Physical cash inventory operations go through `api.money.CashWallet`.
 - Player or profile resolution belongs in `bank.transfer`, not in screens.
 - New features should extend interfaces first, then implementation.
@@ -92,10 +92,13 @@ Goal: evolve into a server economy ecosystem if the server scale justifies it.
 - `api.money`: physical cash wallet abstraction.
 - `api.transaction`: ledger append/query abstraction.
 - `bank.service`: server-side bank use cases.
-- `bank.storage`: `SavedData` implementation for balances and transaction records.
+- `bank.enterprise`: enterprise account, member role, and enterprise ledger models.
+- `bank.inbox`: personal bank inbox message models.
+- `bank.storage`: `SavedData` implementation for balances, transaction records, enterprises, inbox, and screen preference.
 - `bank.transfer`: transfer target resolution.
 - `bank.ui`: server-side GUI access service and snapshot sending.
-- `client.gui`: client bank screen, filtering, sorting, and request sending.
+- `client.gui`: client personal bank, enterprise bank, and admin bank screens.
+- `client.gui.foundation`: shared native GUI theme, card rendering, and line-chart helpers.
 - `money`: denominations, formatting, custom cash data.
 - `money.cash`: player inventory cash implementation.
 - `network`: NeoForge payload registration and handlers.
@@ -106,16 +109,29 @@ Goal: evolve into a server economy ecosystem if the server scale justifies it.
 - `BankService` already exposes balance, deposit, deposit-all, withdraw, transfer, and recent transaction use cases.
 - `ServerBankService` is the central mutation path today.
 - `BankSavedData` currently implements both account storage and transaction storage.
+- `EnterpriseSavedData` stores enterprise accounts, enterprise code index, inbox messages, and the player's last personal/enterprise preference.
+- `EnterpriseAccount` is independent from personal `BankAccount`; do not model enterprises as a player's second balance.
+- Enterprise codes are globally unique 3-4 character uppercase letter/digit IDs and are resolved through enterprise service logic.
+- `ServerEnterpriseService` owns enterprise registration, invitations, role checks, enterprise transfers, settings, and disband flow.
+- Enterprise roles are `OWNER`, `ADMIN`, and `MEMBER`; only `OWNER` can manage roles and disband, while `ADMIN` can manage money and invite members.
 - `BankSavedData` indexes transaction records by owner for query performance; keep this index in sync with the persisted transaction list.
 - Transfer writes two records: `TRANSFER_OUT` for sender and `TRANSFER_IN` for receiver.
-- Bank snapshots send balance, message, message key, success flag, access channel, and up to 1000 transaction rows.
+- Enterprise transfers write enterprise ledger rows in `EnterpriseSavedData`; do not mix them into the personal transaction index unless a personal account is also a counterparty.
+- Bank snapshots send balance, message, message key, success flag, access channel, frozen flag, inbox, enterprise summaries, preference, and up to 1000 transaction rows.
 - `BankCardItem` binds itself to the first server-side user through the `bank_card` data component and rejects other players.
 - A newly bound bank card gets a one-time custom name of `<player>的梦澄银行卡` and an enchantment glint override. Do not use the displayed name for authorization; players may rename the card with an anvil after binding.
 - `MoneyData` is reserved for custom cash such as commemorative bills or event currency.
 - Network bank requests carry a client requestId. The server stores a bounded per-player set of processed request IDs and rejects replays.
 - Deposit/withdraw requests carry `BankAccessChannel`; ledger counterparty text uses it for entries such as `ATM存入`, `ATM取现`, `随身银行存入`, and `随身银行取现`.
 - Transfers to resolvable UUIDs without an existing account fail with `message.yumesumi_finance.transfer.account_not_found` and must not create a receiver account.
+- Transfers to `YB` are resolved through `bank.transfer` to the official treasury and credit `BankSavedData.treasuryBalance`.
+- Personal-to-enterprise transfers are explicit and require `TransferRequestPayload.targetEnterprise() == true`; target lookup uses enterprise code.
+- Enterprise-origin transfers use `EnterpriseRequestPayload` and `ServerEnterpriseService`, not `ServerBankService.transfer`.
+- Frozen accounts cannot deposit, withdraw, or transfer; they can still view transaction history.
+- Admin notes are visible/editable only in the bank admin console and are capped at 64 characters.
+- Deleting an account does not delete ledger history. If a deleted account has a non-zero balance, that balance moves into the official treasury.
 - `BankScreen` uses responsive sizing. History rows per page are calculated from available panel height, not a fixed constant.
+- `BankScreen` is now the personal bank GUI and includes inbox and enterprise switching. `EnterpriseScreen` handles register/list/detail enterprise views. Both are first-pass native GUI implementations and still need visual polish.
 
 When docs disagree, prefer the current code and `docs/design/bank-ledger-and-transfer.md`; `docs/design/transactions.md` still describes an older lightweight transaction stage.
 
@@ -167,6 +183,12 @@ $env:JAVA_HOME='C:\Program Files\Java\graalvm-community-openjdk-21.0.2+13.1'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 ```
 
+## 开发提示
+
+- 回复必须使用中文，涉及代码标识符时保留原文。
+- 如果本地有开发服务器且未占用默认端口，实现后应启动它并给出访问地址；如果被占用则改用其它端口。
+- 并行读取多个本地文件时，优先使用 `multi_tool_use.parallel`，不要拆成多段 shell 命令。
+
 ## Suggested New-Session Prompt
 
 Use this when opening a new vibe-coding session:
@@ -176,11 +198,11 @@ You are maintaining Yumesumi Finance / 梦澄金融, a Minecraft NeoForge 1.21.1
 
 First read AGENTS.md, README.md, and docs/design/*.md. Treat AGENTS.md as the handoff guide and prefer current source code when older docs disagree.
 
-Current version is 1.2.1. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. Do not weaken v1.2 bank-core protections while adding payment gameplay.
+Current version is 1.2.6. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. The repo also contains first-pass enterprise accounts and native GUI refactors; do not weaken v1.2 bank-core protections while extending them.
 
 Currency is Yumesumi Dollar, code YSD, symbol S$, cents as ¢. Internally all amounts are long cents.
 
-Follow the architecture rule: server is authoritative; GUI and network are request/snapshot only; financial mutations belong in BankService/ServerBankService; persistence belongs in BankSavedData; player target resolution belongs in bank.transfer.
+Follow the architecture rule: server is authoritative; GUI and network are request/snapshot only; personal financial mutations belong in BankService/ServerBankService; enterprise mutations belong in ServerEnterpriseService; personal persistence belongs in BankSavedData; enterprise persistence belongs in EnterpriseSavedData; player target resolution belongs in bank.transfer.
 
 Before editing, inspect the relevant current source files and preserve existing project style. After editing, run .\gradlew.bat build if feasible and report any failures.
 ```

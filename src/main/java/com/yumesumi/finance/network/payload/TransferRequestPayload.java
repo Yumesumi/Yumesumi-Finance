@@ -7,7 +7,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record TransferRequestPayload(long requestId, BankAccessChannel channel, String target, long amountCents, String note) implements CustomPacketPayload {
+public record TransferRequestPayload(long requestId, BankAccessChannel channel, String target, long amountCents, String note, boolean targetEnterprise) implements CustomPacketPayload {
     public static final Type<TransferRequestPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "transfer"));
     public static final StreamCodec<RegistryFriendlyByteBuf, TransferRequestPayload> STREAM_CODEC = StreamCodec.of(
             TransferRequestPayload::write,
@@ -17,6 +17,11 @@ public record TransferRequestPayload(long requestId, BankAccessChannel channel, 
     public TransferRequestPayload {
         channel = channel == null ? BankAccessChannel.ATM : channel;
         note = note == null ? "" : note.trim();
+        if (note.length() > 64) note = note.substring(0, 64);
+    }
+
+    public TransferRequestPayload(long requestId, BankAccessChannel channel, String target, long amountCents, String note) {
+        this(requestId, channel, target, amountCents, note, false);
     }
 
     @Override
@@ -29,16 +34,18 @@ public record TransferRequestPayload(long requestId, BankAccessChannel channel, 
         buffer.writeEnum(payload.channel());
         buffer.writeUtf(payload.target());
         buffer.writeVarLong(payload.amountCents());
-        buffer.writeUtf(payload.note());
+        buffer.writeUtf(payload.note(), 64);
+        buffer.writeBoolean(payload.targetEnterprise());
     }
 
     private static TransferRequestPayload read(RegistryFriendlyByteBuf buffer) {
         return new TransferRequestPayload(
                 buffer.readVarLong(),
                 buffer.readEnum(BankAccessChannel.class),
-                buffer.readUtf(),
+                buffer.readUtf(64),
                 buffer.readVarLong(),
-                buffer.readUtf()
+                buffer.readUtf(),
+                buffer.readBoolean()
         );
     }
 }

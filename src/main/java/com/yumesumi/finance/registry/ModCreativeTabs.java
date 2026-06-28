@@ -17,7 +17,9 @@ public final class ModCreativeTabs {
             .icon(() -> ModItems.BANK_CARD.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(ModItems.ATM.get());
+                output.accept(ModItems.ENTERPRISE_REGISTRATION_TERMINAL.get());
                 output.accept(ModItems.BANK_CARD.get());
+                output.accept(ModItems.BANK_ADMIN_CARD.get());
                 ModItems.CASH.values().forEach(item -> output.accept(item.get()));
             })
             .build());

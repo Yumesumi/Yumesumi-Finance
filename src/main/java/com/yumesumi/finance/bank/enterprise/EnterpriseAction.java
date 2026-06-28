@@ -1,0 +1,21 @@
+package com.yumesumi.finance.bank.enterprise;
+
+public enum EnterpriseAction {
+    OPEN_REGISTER,
+    CHECK_CODE,
+    CREATE,
+    OPEN_LIST,
+    OPEN_PERSONAL,
+    OPEN_DETAIL,
+    INVITE_MEMBER,
+    ACCEPT_INVITE,
+    MARK_MESSAGE_READ,
+    TOGGLE_MESSAGE_STAR,
+    DELETE_MESSAGE,
+    UPDATE_SETTINGS,
+    DISBAND,
+    TRANSFER_FROM_ENTERPRISE,
+    QUICK_TRANSFER_MEMBER,
+    SET_MEMBER_ROLE,
+    REMOVE_MEMBER
+}

@@ -2,6 +2,7 @@ package com.yumesumi.finance.registry;
 
 import com.yumesumi.finance.YumesumiFinance;
 import com.yumesumi.finance.block.AtmBlock;
+import com.yumesumi.finance.block.EnterpriseRegistrationTerminalBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -17,6 +18,13 @@ public final class ModBlocks {
                     .strength(3.5F, 6.0F)
                     .sound(SoundType.METAL)
     ));
+    public static final DeferredBlock<EnterpriseRegistrationTerminalBlock> ENTERPRISE_REGISTRATION_TERMINAL = BLOCKS.register("enterprise_registration_terminal",
+            () -> new EnterpriseRegistrationTerminalBlock(
+                    BlockBehaviour.Properties.of()
+                            .mapColor(MapColor.METAL)
+                            .strength(3.5F, 6.0F)
+                            .sound(SoundType.METAL)
+            ));
 
     private ModBlocks() {
     }

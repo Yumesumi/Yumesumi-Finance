@@ -1,28 +1,49 @@
 package com.yumesumi.finance.network;
 
+import com.yumesumi.finance.client.gui.BankAdminScreen;
+import com.yumesumi.finance.client.gui.BankScreen;
+import com.yumesumi.finance.client.gui.EnterpriseScreen;
+import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload;
 import com.yumesumi.finance.network.payload.BankSnapshotPayload;
-import java.lang.reflect.Method;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
+import com.yumesumi.finance.network.payload.EnterpriseSnapshotPayload;
+import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public final class ClientPayloadHandlers {
-    private ClientPayloadHandlers() {
-    }
+    private ClientPayloadHandlers() {}
 
     public static void handleBankSnapshot(BankSnapshotPayload payload, IPayloadContext context) {
-        if (FMLEnvironment.dist != Dist.CLIENT) {
-            return;
-        }
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof BankScreen screen) {
+                screen.update(payload);
+            } else if (minecraft.screen instanceof BankScreen.TransferLoadingScreen loading) {
+                loading.parent().update(payload);
+                minecraft.setScreen(loading.parent());
+            } else {
+                minecraft.setScreen(new BankScreen(payload));
+            }
+        });
+    }
 
-        // 避免专用服务端加载任何 Minecraft 客户端类。
-        context.enqueueWork(() -> {
-            try {
-                Class<?> bridge = Class.forName("com.yumesumi.finance.client.gui.BankScreenBridge");
-                Method method = bridge.getMethod("openOrUpdate", BankSnapshotPayload.class);
-                method.invoke(null, payload);
-            } catch (ReflectiveOperationException exception) {
-                throw new IllegalStateException("无法打开梦澄金融 GUI", exception);
+    public static void handleAdminSnapshot(BankAdminSnapshotPayload payload, IPayloadContext context) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof BankAdminScreen screen) {
+                screen.update(payload);
+            } else {
+                minecraft.setScreen(new BankAdminScreen(payload));
+            }
+        });
+    }
+
+    public static void handleEnterpriseSnapshot(EnterpriseSnapshotPayload payload, IPayloadContext context) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof EnterpriseScreen screen) {
+                screen.update(payload);
+            } else {
+                minecraft.setScreen(new EnterpriseScreen(payload));
             }
         });
     }

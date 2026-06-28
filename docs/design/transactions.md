@@ -65,3 +65,28 @@ String note;
 
 - 付款方 `TRANSFER_OUT`
 - 收款方 `TRANSFER_IN`
+
+玩家向官方国库 `YB` 转账是一个特例：当前只写付款方 `TRANSFER_OUT`，并把金额加入 `BankSavedData.treasuryBalance`。国库余额使用 `BigInteger`，而 `TransactionRecord.balanceAfterCents` 仍是 `long`，因此国库侧流水需要未来单独设计。
+
+## 企业流水
+
+企业流水不使用 `TransactionRecord`，而是保存在 `EnterpriseSavedData` 内的 `EnterpriseTransactionRecord`。单个企业最多保留 10000 条记录。
+
+当前企业流水类型：
+
+```text
+REGISTER_FEE
+TRANSFER_IN
+TRANSFER_OUT
+ADJUST
+DISBAND
+```
+
+企业流水额外记录操作者：
+
+```java
+UUID operatorId;
+String operatorName;
+```
+
+后续营收统计、手续费、利息或税务进入企业账户时，应优先扩展 `EnterpriseTransactionType`，不要把企业流水写进个人 `transactionsByOwner` 索引。
