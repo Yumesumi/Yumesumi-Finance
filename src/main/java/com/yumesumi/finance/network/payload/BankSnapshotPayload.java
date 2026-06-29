@@ -53,9 +53,22 @@ public record BankSnapshotPayload(
     public static BankSnapshotPayload of(long balanceCents, long cashBalanceCents, Component message, String messageKey, boolean success, BankAccessChannel channel,
                                          List<TransactionRecord> transactions, boolean accountFrozen,
                                          List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise) {
-        return new BankSnapshotPayload(
+        return ofViews(
                 balanceCents, cashBalanceCents, message, messageKey, success, channel,
                 transactions.stream().limit(1_000).map(BankTransactionView::from).toList(),
+                accountFrozen,
+                inbox,
+                enterprises,
+                preferEnterprise
+        );
+    }
+
+    public static BankSnapshotPayload ofViews(long balanceCents, long cashBalanceCents, Component message, String messageKey, boolean success, BankAccessChannel channel,
+                                             List<BankTransactionView> transactions, boolean accountFrozen,
+                                             List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise) {
+        return new BankSnapshotPayload(
+                balanceCents, cashBalanceCents, message, messageKey, success, channel,
+                transactions.stream().limit(1_000).toList(),
                 accountFrozen,
                 inbox,
                 enterprises,

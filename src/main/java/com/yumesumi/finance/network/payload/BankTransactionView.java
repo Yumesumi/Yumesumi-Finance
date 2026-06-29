@@ -13,6 +13,7 @@ public record BankTransactionView(
         long createdTime,
         String counterpartyName,
         UUID counterpartyId,
+        String counterpartyCode,
         String note
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, BankTransactionView> STREAM_CODEC = StreamCodec.of(
@@ -21,6 +22,10 @@ public record BankTransactionView(
     );
 
     public static BankTransactionView from(TransactionRecord record) {
+        return from(record, "");
+    }
+
+    public static BankTransactionView from(TransactionRecord record, String counterpartyCode) {
         return new BankTransactionView(
                 record.type(),
                 record.amountCents(),
@@ -28,8 +33,15 @@ public record BankTransactionView(
                 record.createdGameTime(),
                 record.counterpartyName(),
                 record.counterpartyId(),
+                counterpartyCode,
                 record.note()
         );
+    }
+
+    public BankTransactionView {
+        counterpartyName = counterpartyName == null ? "" : counterpartyName;
+        counterpartyCode = counterpartyCode == null ? "" : counterpartyCode;
+        note = note == null ? "" : note;
     }
 
     public static void write(RegistryFriendlyByteBuf buffer, BankTransactionView view) {
@@ -42,6 +54,7 @@ public record BankTransactionView(
         if (view.counterpartyId() != null) {
             buffer.writeUUID(view.counterpartyId());
         }
+        buffer.writeUtf(view.counterpartyCode(), 8);
         buffer.writeUtf(view.note(), 128);
     }
 
@@ -52,6 +65,7 @@ public record BankTransactionView(
         long createdTime = buffer.readVarLong();
         String counterpartyName = buffer.readUtf(128);
         UUID counterpartyId = buffer.readBoolean() ? buffer.readUUID() : null;
+        String counterpartyCode = buffer.readUtf(8);
         String note = buffer.readUtf(128);
         return new BankTransactionView(
                 type,
@@ -60,6 +74,7 @@ public record BankTransactionView(
                 createdTime,
                 counterpartyName,
                 counterpartyId,
+                counterpartyCode,
                 note
         );
     }

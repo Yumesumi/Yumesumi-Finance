@@ -22,7 +22,6 @@ import com.yumesumi.finance.transaction.TransactionSortField;
 import com.yumesumi.finance.transaction.TransactionSortOrder;
 import com.yumesumi.finance.transaction.TransactionType;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -58,10 +57,14 @@ public class BankScreen extends Screen {
     private static final int LINE = 0xFFFFFFFF;
     private static final int NARROW_W = 312;
     private static final int NARROW_H = 304;
-    private static final int HISTORY_ROW_H = 54;
+    private static final int HISTORY_ROW_H = 30;
+    private static final int HISTORY_TABLE_Y = 96;
+    private static final int HISTORY_FOOTER_H = 78;
+    private static final int HISTORY_CELL_PAD_X = 6;
+    private static final int HISTORY_ROW_TEXT_TOP = 5;
+    private static final int HISTORY_ROW_TEXT_BOTTOM = 18;
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("\\d+(\\.\\d{1,2})?");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
-    private static final DateTimeFormatter NOW_FMT = DateTimeFormatter.ofPattern("yyyy年MM月dd日HH点mm分");
 
     private final List<ActionButton> actionButtons = new ArrayList<>();
     private Page page = Page.HOME;
@@ -274,7 +277,7 @@ public class BankScreen extends Screen {
 
     private void buildHistoryPage() {
         int x = 20;
-        int y = 102;
+        int y = 66;
         addAction(directionLabel(), x, y, 64, 22, () -> {
             historyDirection = switch (historyDirection) {
                 case ALL -> TransactionDirection.INCOME;
@@ -306,33 +309,32 @@ public class BankScreen extends Screen {
 
     private void renderHistory(GuiGraphics g, int mx, int my) {
         g.fill(0, 0, width, height, 0xF0000000);
-        g.drawString(font, "交易明细", 20, 26, WHITE, true);
-        drawTitle(g, "梦澄银行-查询", "个人版", 26);
-        hLine(g, 0, width, 56);
+        g.drawString(font, "交易明细", 20, 18, WHITE, true);
+        drawTitle(g, "梦澄银行-查询", "个人版", 18);
+        hLine(g, 0, width, 48);
         String playerName = playerName();
-        int infoY = 76;
+        int infoY = 52;
         g.drawString(font, "用户：" + playerName, 20, infoY, WHITE, true);
         renderPlayerTooltip(g, mx, my, 20 + font.width("用户："), infoY, playerName, currentPlayerId());
         g.drawString(font, "银行余额：" + MoneyFormatter.format(balanceCents), 168, infoY, WHITE, true);
-        g.drawString(font, "当前时间：" + NOW_FMT.format(LocalDateTime.now()), 350, infoY, WHITE, true);
-        hLine(g, 0, width, 136);
+        hLine(g, 0, width, HISTORY_TABLE_Y);
 
         List<BankTransactionView> rows = filteredTransactions();
-        int rowsPerPage = Math.max(1, (height - 204) / HISTORY_ROW_H);
+        int rowsPerPage = Math.max(1, (height - HISTORY_TABLE_Y - HISTORY_FOOTER_H) / HISTORY_ROW_H);
         int totalPages = Math.max(1, (rows.size() + rowsPerPage - 1) / rowsPerPage);
         historyPage = Math.min(historyPage, totalPages - 1);
         int from = Math.min(historyPage * rowsPerPage, rows.size());
         int to = Math.min(from + rowsPerPage, rows.size());
         int[] columns = historyColumns();
-        for (int col : columns) vLine(g, col, 136, 136 + rowsPerPage * HISTORY_ROW_H);
+        for (int col : columns) vLine(g, col, HISTORY_TABLE_Y, HISTORY_TABLE_Y + rowsPerPage * HISTORY_ROW_H);
         for (int i = from; i < to; i++) {
             BankTransactionView view = rows.get(i);
-            int rowY = 136 + (i - from) * HISTORY_ROW_H;
+            int rowY = HISTORY_TABLE_Y + (i - from) * HISTORY_ROW_H;
             renderHistoryRow(g, view, rowY, columns, mx, my);
             hLine(g, 0, width, rowY + HISTORY_ROW_H);
         }
         if (rows.isEmpty()) {
-            g.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_empty"), width / 2, 174, MUTED);
+            g.drawCenteredString(font, Component.translatable("screen.yumesumi_finance.history_empty"), width / 2, HISTORY_TABLE_Y + 34, MUTED);
         }
         g.drawCenteredString(font, (historyPage + 1) + "/" + totalPages, 86, height - 62, WHITE);
         g.drawCenteredString(font, rows.size() + "/1000", width / 2, height - 62, WHITE);
@@ -343,24 +345,26 @@ public class BankScreen extends Screen {
         boolean income = view.type().income();
         String direction = income ? "收入" : "支出";
         int amountColor = income ? GREEN : RED;
-        g.drawString(font, direction, 20, y + 12, WHITE, true);
-        g.drawString(font, formatTime(view.createdTime()), 20, y + 32, WHITE, true);
-        g.drawString(font, (income ? "+" : "-") + MoneyFormatter.format(view.amountCents()), columns[0] + 20, y + 12, amountColor, true);
-        g.drawString(font, "余额 " + MoneyFormatter.format(view.balanceAfterCents()), columns[0] + 20, y + 32, WHITE, true);
-        g.drawString(font, transactionSourceName(view), columns[1] + 14, y + 12, WHITE, true);
+        g.drawString(font, direction, 20, y + HISTORY_ROW_TEXT_TOP, WHITE, true);
+        g.drawString(font, formatTime(view.createdTime()), 20, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
+        g.drawString(font, (income ? "+" : "-") + MoneyFormatter.format(view.amountCents()), columns[0] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_TOP, amountColor, true);
+        g.drawString(font, "余额 " + MoneyFormatter.format(view.balanceAfterCents()), columns[0] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
+        g.drawString(font, transactionSourceName(view), columns[1] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_TOP, WHITE, true);
         String counterpartyPrefix = income ? "来自 " : "向";
         String counterparty = counterpartyText(view);
-        g.drawString(font, counterpartyPrefix + counterparty, columns[1] + 14, y + 32, WHITE, true);
-        if (view.counterpartyId() != null && !counterparty.isBlank()) {
-            renderPlayerTooltip(g, mx, my, columns[1] + 14 + font.width(counterpartyPrefix), y + 32, counterparty, view.counterpartyId());
-        }
+        int counterpartyX = columns[1] + HISTORY_CELL_PAD_X + font.width(counterpartyPrefix);
+        g.drawString(font, counterpartyPrefix + counterparty, columns[1] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
+        renderHistoryEntityTooltip(g, mx, my, counterpartyX, y + HISTORY_ROW_TEXT_BOTTOM, counterparty, view);
         String note = visibleNote(view.note());
         String preview = notePreview(note);
-        g.drawString(font, "备注：" + preview, columns[2] + 18, y + 12, WHITE, true);
-        if (!note.equals(preview) && mx >= columns[2] + 18 && mx <= width - 20 && my >= y + 10 && my <= y + 24) {
+        g.drawString(font, "备注：" + preview, columns[2] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_TOP, WHITE, true);
+        if (!note.equals(preview) && mx >= columns[2] + HISTORY_CELL_PAD_X && mx <= width - 20 && my >= y + HISTORY_ROW_TEXT_TOP && my <= y + HISTORY_ROW_TEXT_TOP + 12) {
             g.renderTooltip(font, Component.literal(note), mx, my);
         }
-        g.drawString(font, "操作人：" + (income ? counterparty : playerName()), columns[2] + 18, y + 32, WHITE, true);
+        String operator = income ? counterparty : playerName();
+        int operatorX = columns[2] + HISTORY_CELL_PAD_X + font.width("操作人：");
+        g.drawString(font, "操作人：" + operator, columns[2] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
+        renderOperatorTooltip(g, mx, my, operatorX, y + HISTORY_ROW_TEXT_BOTTOM, operator, income, view);
     }
 
     private void buildInboxPage() {
@@ -740,7 +744,7 @@ public class BankScreen extends Screen {
     }
 
     private void clampHistoryPage() {
-        int rows = Math.max(1, (height - 204) / HISTORY_ROW_H);
+        int rows = Math.max(1, (height - HISTORY_TABLE_Y - HISTORY_FOOTER_H) / HISTORY_ROW_H);
         int max = Math.max(0, (filteredTransactions().size() + rows - 1) / rows - 1);
         historyPage = Math.min(historyPage, max);
     }
@@ -855,10 +859,33 @@ public class BankScreen extends Screen {
         }
     }
 
+    private void renderHistoryEntityTooltip(GuiGraphics g, int mx, int my, int x, int y, String name, BankTransactionView view) {
+        String tooltip = historyEntityTooltip(view);
+        if (!tooltip.isBlank() && !name.isBlank() && inside(mx, my, x, y, font.width(name), 10)) {
+            g.renderTooltip(font, Component.literal(tooltip), mx, my);
+        }
+    }
+
+    private void renderOperatorTooltip(GuiGraphics g, int mx, int my, int x, int y, String name, boolean income, BankTransactionView view) {
+        UUID playerId = currentPlayerId();
+        String tooltip = income ? historyEntityTooltip(view) : playerId == null ? "" : playerId.toString();
+        if (!tooltip.isBlank() && !name.isBlank() && inside(mx, my, x, y, font.width(name), 10)) {
+            g.renderTooltip(font, Component.literal(tooltip), mx, my);
+        }
+    }
+
+    private String historyEntityTooltip(BankTransactionView view) {
+        if (!view.counterpartyCode().isBlank()) return view.counterpartyCode();
+        return view.counterpartyId() == null ? "" : view.counterpartyId().toString();
+    }
+
     private int[] historyColumns() {
-        int c1 = Math.max(164, width / 6);
-        int c2 = Math.max(c1 + 174, width / 3);
-        int c3 = Math.max(c2 + 208, width / 2 + 38);
+        int c1 = Math.max(96, width * 15 / 100);
+        int c2 = Math.max(c1 + 108, width * 32 / 100);
+        int c3 = Math.max(c2 + 136, width * 53 / 100);
+        if (c3 > width - 132) {
+            c3 = Math.max(c2 + 96, width - 132);
+        }
         return new int[]{c1, c2, c3};
     }
 

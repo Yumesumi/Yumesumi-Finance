@@ -2,7 +2,7 @@
 
 ## 账户类型
 
-v1.2.6 账户类型由 `BankAccountType` 定义：
+v1.2.7 账户类型由 `BankAccountType` 定义：
 
 ```text
 PERSONAL    个人账户

@@ -5,7 +5,7 @@ This file is the fast-start guide for future coding agents. Read it before chang
 ## Project Snapshot
 
 - Project: Yumesumi Finance / 梦澄金融
-- Current version: 1.2.6
+- Current version: 1.2.7
 - Target: Minecraft Java Edition 1.21.1
 - Loader: NeoForge 21.1.x
 - Language: Java 21
@@ -198,7 +198,7 @@ You are maintaining Yumesumi Finance / 梦澄金融, a Minecraft NeoForge 1.21.1
 
 First read AGENTS.md, README.md, and docs/design/*.md. Treat AGENTS.md as the handoff guide and prefer current source code when older docs disagree.
 
-Current version is 1.2.6. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. The repo also contains first-pass enterprise accounts and native GUI refactors; do not weaken v1.2 bank-core protections while extending them.
+Current version is 1.2.7. The next milestone is v1.3 Payment System: POS/payment receiver blocks, player-to-player payment workflow, shop receiving accounts, recent payees, and configurable transfer fees. The repo also contains first-pass enterprise accounts and native GUI refactors; do not weaken v1.2 bank-core protections while extending them.
 
 Currency is Yumesumi Dollar, code YSD, symbol S$, cents as ¢. Internally all amounts are long cents.
 
