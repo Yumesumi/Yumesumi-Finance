@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -41,19 +42,19 @@ public class BankAdminScreen extends Screen {
     private static final int SCREEN_BG = FinanceTheme.BACKGROUND;
     private static final int C_BG = SCREEN_BG;
     private static final int C_HEADER = SCREEN_BG;
-    private static final int C_TABLE_HDR = 0xFF1A2436;
-    private static final int C_ROW_EVEN = 0xFF111A28;
-    private static final int C_ROW_ODD = 0xFF0B111C;
-    private static final int C_ROW_SEL = 0xFF254B7A;
+    private static final int C_TABLE_HDR = SCREEN_BG;
+    private static final int C_ROW_EVEN = SCREEN_BG;
+    private static final int C_ROW_ODD = SCREEN_BG;
+    private static final int C_ROW_SEL = 0x22FFFFFF;
     private static final int C_ROW_FROZEN = 0x22FF3333;
     private static final int C_TEXT = 0xFFFFFFFF;
     private static final int C_TEXT_DIM = 0xFFF4F7FF;
     private static final int C_TEXT_MUTED = 0xFFE3EAF5;
-    private static final int C_ACCENT = 0xFF84C2FF;
-    private static final int C_ACCENT2 = 0xFFFFD36A;
-    private static final int C_GREEN = 0xFF7DFFC0;
-    private static final int C_RED = 0xFFFF7480;
-    private static final int C_DIVIDER = 0x66FFFFFF;
+    private static final int C_ACCENT = 0xFFFFFFFF;
+    private static final int C_ACCENT2 = 0xFFFFD000;
+    private static final int C_GREEN = 0xFF00FF38;
+    private static final int C_RED = 0xFFFF2020;
+    private static final int C_DIVIDER = 0xFFFFFFFF;
     private static final UUID TREASURY_UUID = UUID.fromString("a0000000-0000-0000-0000-000000000001");
 
     private Page page = Page.MAIN;
@@ -98,6 +99,7 @@ public class BankAdminScreen extends Screen {
             case TREASURY -> renderTreasuryPage(g, left, top, w, h, mx, my);
         }
         super.render(g, mx, my, pt);
+        renderPixelButtons(g, mx, my);
         if (statusTimer > 0 && !statusMessage.getString().isEmpty()) {
             g.drawCenteredString(font, statusMessage, left + w / 2, top + h - 10, C_ACCENT2);
         }
@@ -158,6 +160,10 @@ public class BankAdminScreen extends Screen {
         String[] headers = listType == BankAccountType.ENTERPRISE
                 ? new String[]{"", "企业名称", "企业代码", "企业简介", "\u5f00\u6237\u65f6\u95f4", "\u6700\u540e\u6d3b\u8dc3", "\u4f59\u989d", "\u72b6\u6001", "\u5907\u6ce8"}
                 : new String[]{"", "\u540d\u79f0", "UUID", "\u5f00\u6237\u65f6\u95f4", "\u6700\u540e\u6d3b\u8dc3", "\u4f59\u989d", "\u72b6\u6001", "\u5907\u6ce8"};
+        hLine(g, tl, tl + tw, hdrY);
+        hLine(g, tl, tl + tw, hdrY + TABLE_HEADER_HEIGHT);
+        for (int col : cx) vLine(g, col, hdrY, tableBottom);
+        vLine(g, tl + tw, hdrY, tableBottom);
         for (int i = 0; i < headers.length && i < cx.length; i++) g.drawString(font, headers[i], cx[i] + 2, hdrY + 7, C_TEXT_DIM, true);
         if (rows.isEmpty()) {
             g.drawString(font, "没有可显示的账户", tl, hdrY + TABLE_HEADER_HEIGHT + 12, C_TEXT_MUTED, true);
@@ -196,7 +202,7 @@ public class BankAdminScreen extends Screen {
                     g.renderTooltip(font, Component.literal(v.adminNote()), mx, my);
                 }
             }
-            g.fill(tl, ry + ROW_HEIGHT - 1, tl + tw, ry + ROW_HEIGHT, C_DIVIDER);
+            hLine(g, tl, tl + tw, ry + ROW_HEIGHT - 1, 0x99FFFFFF);
         }
 
         int by = t + h - 30;
@@ -252,10 +258,13 @@ public class BankAdminScreen extends Screen {
         g.drawString(font, "\u91d1\u989d", tableX + 120, tableY - 15, C_TEXT_DIM, true);
         g.drawString(font, "\u64cd\u4f5c\u4eba", tableX + 250, tableY - 15, C_TEXT_DIM, true);
         g.drawString(font, "\u5907\u6ce8", tableX + 390, tableY - 15, C_TEXT_DIM, true);
-        g.fill(tableX, tableY, tableX + tableW, tableY + 2, C_DIVIDER);
-        g.fill(tableX + 108, tableY - 22, tableX + 110, tableY + rowsPerPage * rowH, C_DIVIDER);
-        g.fill(tableX + 238, tableY - 22, tableX + 240, tableY + rowsPerPage * rowH, C_DIVIDER);
-        g.fill(tableX + 378, tableY - 22, tableX + 380, tableY + rowsPerPage * rowH, C_DIVIDER);
+        hLine(g, tableX, tableX + tableW, tableY - 22);
+        hLine(g, tableX, tableX + tableW, tableY);
+        vLine(g, tableX, tableY - 22, tableY + rowsPerPage * rowH);
+        vLine(g, tableX + 108, tableY - 22, tableY + rowsPerPage * rowH);
+        vLine(g, tableX + 238, tableY - 22, tableY + rowsPerPage * rowH);
+        vLine(g, tableX + 378, tableY - 22, tableY + rowsPerPage * rowH);
+        vLine(g, tableX + tableW, tableY - 22, tableY + rowsPerPage * rowH);
         if (rows.isEmpty()) {
             g.drawString(font, "\u6682\u65e0\u56fd\u5e93\u6d41\u6c34", tableX, tableY + 12, C_TEXT_MUTED, true);
         }
@@ -275,7 +284,7 @@ public class BankAdminScreen extends Screen {
             if (mx >= tableX + 390 && mx <= tableX + tableW && my >= y && my <= y + rowH && font.width(tx.note()) > noteWidth) {
                 g.renderTooltip(font, Component.literal(tx.note()), mx, my);
             }
-            g.fill(tableX, y + rowH - 1, tableX + tableW, y + rowH, C_DIVIDER);
+            hLine(g, tableX, tableX + tableW, y + rowH - 1, 0x99FFFFFF);
         }
         g.drawCenteredString(font, (treasuryPage + 1) + "/" + totalPages + "  " + rows.size() + "/10000", l + w / 2, t + h - 48, C_TEXT_MUTED);
     }
@@ -484,6 +493,58 @@ public class BankAdminScreen extends Screen {
             }
         }
         return super.mouseClicked(mx, my, button);
+    }
+
+    private void renderPixelButtons(GuiGraphics g, int mx, int my) {
+        for (var renderable : renderables) {
+            if (renderable instanceof Button button) {
+                renderPixelButton(g, button, mx, my);
+            }
+        }
+    }
+
+    private void renderPixelButton(GuiGraphics g, AbstractWidget button, int mx, int my) {
+        int x = button.getX();
+        int y = button.getY();
+        int w = button.getWidth();
+        int h = button.getHeight();
+        boolean hovered = button.active && inside(mx, my, x, y, w, h);
+        int color = button.active ? hovered ? C_ACCENT2 : C_TEXT : C_TEXT_MUTED;
+        g.fill(x, y, x + w, y + h, SCREEN_BG);
+        if (hovered) {
+            g.fill(x + 2, y + 2, x + w - 2, y + h - 2, 0x22FFFFFF);
+        }
+        drawBox(g, x, y, w, h, color);
+        g.drawCenteredString(font, button.getMessage(), x + w / 2, y + Math.max(5, (h - 8) / 2), color);
+    }
+
+    private void drawBox(GuiGraphics g, int x, int y, int w, int h, int color) {
+        hLine(g, x, x + w, y, color);
+        hLine(g, x, x + w, y + h, color);
+        vLine(g, x, y, y + h, color);
+        vLine(g, x + w, y, y + h, color);
+    }
+
+    private void hLine(GuiGraphics g, int x1, int x2, int y) {
+        hLine(g, x1, x2, y, C_DIVIDER);
+    }
+
+    private void hLine(GuiGraphics g, int x1, int x2, int y, int color) {
+        g.fill(x1, y, x2, y + 1, color);
+        g.fill(x1, y + 1, x2, y + 2, color);
+    }
+
+    private void vLine(GuiGraphics g, int x, int y1, int y2) {
+        vLine(g, x, y1, y2, C_DIVIDER);
+    }
+
+    private void vLine(GuiGraphics g, int x, int y1, int y2, int color) {
+        g.fill(x, y1, x + 1, y2, color);
+        g.fill(x + 1, y1, x + 2, y2, color);
+    }
+
+    private boolean inside(double mx, double my, int x, int y, int w, int h) {
+        return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
     private void apply(BankAdminSnapshotPayload p) { allAccounts = p.accounts(); treasuryBalance = p.treasuryBalance(); treasuryTransactions = p.treasuryTransactions(); if (!p.messageKey().isEmpty()) setStatus(Component.translatable(p.messageKey())); }

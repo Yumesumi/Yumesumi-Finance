@@ -36,7 +36,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
@@ -67,6 +69,7 @@ public class BankScreen extends Screen {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final List<ActionButton> actionButtons = new ArrayList<>();
+    private ActionButton pressedActionButton;
     private Page page = Page.HOME;
     private long balanceCents;
     private long cashBalanceCents;
@@ -350,7 +353,7 @@ public class BankScreen extends Screen {
         g.drawString(font, (income ? "+" : "-") + MoneyFormatter.format(view.amountCents()), columns[0] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_TOP, amountColor, true);
         g.drawString(font, "余额 " + MoneyFormatter.format(view.balanceAfterCents()), columns[0] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
         g.drawString(font, transactionSourceName(view), columns[1] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_TOP, WHITE, true);
-        String counterpartyPrefix = income ? "来自 " : "向";
+        String counterpartyPrefix = income ? "来自 " : "向 ";
         String counterparty = counterpartyText(view);
         int counterpartyX = columns[1] + HISTORY_CELL_PAD_X + font.width(counterpartyPrefix);
         g.drawString(font, counterpartyPrefix + counterparty, columns[1] + HISTORY_CELL_PAD_X, y + HISTORY_ROW_TEXT_BOTTOM, WHITE, true);
@@ -428,6 +431,8 @@ public class BankScreen extends Screen {
         if (button == 0) {
             for (ActionButton actionButton : actionButtons) {
                 if (actionButton.active() && inside(mx, my, actionButton.x(), actionButton.y(), actionButton.w(), actionButton.h())) {
+                    pressedActionButton = actionButton;
+                    playButtonClickSound();
                     actionButton.action().run();
                     return true;
                 }
@@ -435,6 +440,12 @@ public class BankScreen extends Screen {
             if (page == Page.INBOX && handleInboxClick(mx, my)) return true;
         }
         return super.mouseClicked(mx, my, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 0) pressedActionButton = null;
+        return super.mouseReleased(mx, my, button);
     }
 
     @Override
@@ -487,10 +498,23 @@ public class BankScreen extends Screen {
 
     private void renderActionButtons(GuiGraphics g, int mx, int my) {
         for (ActionButton button : actionButtons) {
-            int color = button.active() ? WHITE : MUTED;
+            boolean hovered = button.active() && inside(mx, my, button.x(), button.y(), button.w(), button.h());
+            boolean pressed = hovered && button == pressedActionButton;
+            int color = button.active() ? hovered ? GOLD : WHITE : MUTED;
+            if (button.active()) {
+                if (pressed) {
+                    g.fill(button.x() + 2, button.y() + 2, button.x() + button.w() - 2, button.y() + button.h() - 2, 0x55FFFFFF);
+                } else if (hovered) {
+                    g.fill(button.x() + 2, button.y() + 2, button.x() + button.w() - 2, button.y() + button.h() - 2, 0x22FFFFFF);
+                }
+            }
             drawBox(g, button.x(), button.y(), button.w(), button.h(), color);
             g.drawCenteredString(font, button.label(), button.x() + button.w() / 2, button.y() + 7, color);
         }
+    }
+
+    private void playButtonClickSound() {
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
     }
 
     private void renderStatus(GuiGraphics g) {

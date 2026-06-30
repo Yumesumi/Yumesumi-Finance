@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -40,6 +41,12 @@ public class EnterpriseScreen extends Screen {
     private enum LedgerSort { TIME, AMOUNT, BALANCE, OPERATOR }
     private enum SortOrder { ASC, DESC }
 
+    private static final int WHITE = 0xFFFFFFFF;
+    private static final int MUTED = 0xFFB8B8B8;
+    private static final int GOLD = 0xFFFFD000;
+    private static final int GREEN = 0xFF00FF38;
+    private static final int RED = 0xFFFF2020;
+    private static final int LINE = 0xFFFFFFFF;
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("\\d+(\\.\\d{1,2})?");
     private static final Pattern CODE_PATTERN = Pattern.compile("[A-Z0-9]{3,4}");
     private static final int SCREEN_BG = FinanceTheme.BACKGROUND;
@@ -123,14 +130,18 @@ public class EnterpriseScreen extends Screen {
     public void render(GuiGraphics g, int mx, int my, float pt) {
         renderBackground(g, mx, my, pt);
         int l = left(), t = top(), w = panelWidth(), h = panelHeight();
-        g.drawString(font, title, l + 14, t + 12, FinanceTheme.GOLD, true);
-        g.drawString(font, message, l + w - 14 - font.width(message), t + 12, success ? FinanceTheme.GREEN : FinanceTheme.RED, true);
+        drawTitle(g, "梦澄银行-企业", mode == EnterpriseScreenMode.DETAIL ? detail == null ? "企业版" : detail.name() + " [" + detail.code() + "]" : "企业版", t + 12);
+        hLine(g, 0, width, t + 44);
+        if (!message.getString().isBlank()) {
+            g.drawString(font, message, l + w - 14 - font.width(message), t + 14, success ? GREEN : RED, true);
+        }
         switch (mode) {
             case REGISTER -> renderRegister(g, l, t, w, h);
             case LIST -> renderList(g, l, t, w, h, mx, my);
             case DETAIL -> renderDetail(g, l, t, w, h, mx, my);
         }
         super.render(g, mx, my, pt);
+        renderPixelButtons(g, mx, my);
     }
 
     @Override
@@ -235,10 +246,19 @@ public class EnterpriseScreen extends Screen {
         listPage = Math.min(listPage, totalPages - 1);
         int from = Math.min(listPage * rows, rowsData.size());
         int to = Math.min(from + rows, rowsData.size());
+        int tableBottom = tableY + 22 + rows * FinanceTheme.ROW_H;
         g.drawString(font, "企业账户：" + rowsData.size(), tableX, tableY - 14, FinanceTheme.TEXT, true);
         if (rowsData.isEmpty()) {
             g.drawCenteredString(font, "需要创建或加入一个企业", l + w / 2, t + h / 2, FinanceTheme.TEXT_MUTED);
         }
+        hLine(g, tableX, tableX + tableW, tableY);
+        hLine(g, tableX, tableX + tableW, tableY + 22);
+        vLine(g, tableX, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 182, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 242, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 382, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 462, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + tableW, tableY, tableBottom, 0x99FFFFFF);
         g.drawString(font, "企业名称", tableX + 8, tableY + 7, FinanceTheme.TEXT_DIM, true);
         g.drawString(font, "代码", tableX + 190, tableY + 7, FinanceTheme.TEXT_DIM, true);
         g.drawString(font, Component.translatable("screen.yumesumi_finance.balance"), tableX + 250, tableY + 7, FinanceTheme.TEXT_DIM, true);
@@ -377,12 +397,21 @@ public class EnterpriseScreen extends Screen {
         memberPage = Math.min(memberPage, totalPages - 1);
         int from = Math.min(memberPage * rows, members.size());
         int to = Math.min(from + rows, members.size());
+        int tableBottom = tableY + 22 + rows * FinanceTheme.ROW_H;
         g.drawString(font, "成员数量：" + members.size(), tableX, tableY - 14, FinanceTheme.TEXT, true);
         String selectedText = selectedMembers.size() + "/" + members.size();
         g.drawString(font, selectedText, tableX + tableW - font.width(selectedText), tableY - 14, FinanceTheme.TEXT_MUTED, true);
         if (members.isEmpty()) {
             g.drawString(font, "没有符合筛选条件的成员", tableX, tableY + 32, FinanceTheme.TEXT_MUTED, true);
         }
+        hLine(g, tableX, tableX + tableW, tableY);
+        hLine(g, tableX, tableX + tableW, tableY + 22);
+        vLine(g, tableX, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 24, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 190, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 270, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 380, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + tableW, tableY, tableBottom, 0x99FFFFFF);
         g.drawString(font, "", tableX + 8, tableY + 7, FinanceTheme.TEXT_DIM, true);
         g.drawString(font, "成员", tableX + 30, tableY + 7, FinanceTheme.TEXT_DIM, true);
         g.drawString(font, "角色", tableX + 200, tableY + 7, FinanceTheme.TEXT_DIM, true);
@@ -435,6 +464,13 @@ public class EnterpriseScreen extends Screen {
         ledgerPage = Math.min(ledgerPage, totalPages - 1);
         int from = Math.min(ledgerPage * rows, rowsData.size());
         int to = Math.min(from + rows, rowsData.size());
+        int tableBottom = tableY + rows * rowH;
+        hLine(g, tableX, tableX + tableW, tableY);
+        vLine(g, tableX, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 112, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 242, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + 382, tableY, tableBottom, 0x99FFFFFF);
+        vLine(g, tableX + tableW, tableY, tableBottom, 0x99FFFFFF);
         if (rowsData.isEmpty()) {
             g.drawString(font, "暂无流水", tableX, tableY + 12, FinanceTheme.TEXT_MUTED, true);
         }
@@ -806,7 +842,60 @@ public class EnterpriseScreen extends Screen {
     }
 
     private void drawSeparator(GuiGraphics g, int x1, int x2, int y) {
-        g.fill(x1, y, x2, y + 1, 0x66FFFFFF);
+        hLine(g, x1, x2, y, 0x99FFFFFF);
+    }
+
+    private void renderPixelButtons(GuiGraphics g, int mx, int my) {
+        for (var renderable : renderables) {
+            if (renderable instanceof Button button) {
+                renderPixelButton(g, button, mx, my);
+            }
+        }
+    }
+
+    private void renderPixelButton(GuiGraphics g, AbstractWidget button, int mx, int my) {
+        int x = button.getX();
+        int y = button.getY();
+        int w = button.getWidth();
+        int h = button.getHeight();
+        boolean hovered = button.active && inside(mx, my, x, y, w, h);
+        int color = button.active ? hovered ? GOLD : WHITE : MUTED;
+        g.fill(x, y, x + w, y + h, SCREEN_BG);
+        if (hovered) {
+            g.fill(x + 2, y + 2, x + w - 2, y + h - 2, 0x22FFFFFF);
+        }
+        drawBox(g, x, y, w, h, color);
+        g.drawCenteredString(font, button.getMessage(), x + w / 2, y + Math.max(5, (h - 8) / 2), color);
+    }
+
+    private void drawTitle(GuiGraphics g, String titleText, String subtitle, int y) {
+        g.drawCenteredString(font, titleText, width / 2, y, WHITE);
+        g.drawCenteredString(font, subtitle, width / 2, y + 14, MUTED);
+    }
+
+    private void drawBox(GuiGraphics g, int x, int y, int w, int h, int color) {
+        hLine(g, x, x + w, y, color);
+        hLine(g, x, x + w, y + h, color);
+        vLine(g, x, y, y + h, color);
+        vLine(g, x + w, y, y + h, color);
+    }
+
+    private void hLine(GuiGraphics g, int x1, int x2, int y) {
+        hLine(g, x1, x2, y, LINE);
+    }
+
+    private void hLine(GuiGraphics g, int x1, int x2, int y, int color) {
+        g.fill(x1, y, x2, y + 1, color);
+        g.fill(x1, y + 1, x2, y + 2, color);
+    }
+
+    private void vLine(GuiGraphics g, int x, int y1, int y2, int color) {
+        g.fill(x, y1, x + 1, y2, color);
+        g.fill(x + 1, y1, x + 2, y2, color);
+    }
+
+    private boolean inside(double mx, double my, int x, int y, int w, int h) {
+        return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
     private void selectVisibleMembers() {
