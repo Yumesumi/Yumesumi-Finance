@@ -2,6 +2,7 @@ package com.yumesumi.finance.registry;
 
 import com.yumesumi.finance.YumesumiFinance;
 import com.yumesumi.finance.bank.card.BankCardData;
+import com.yumesumi.finance.bank.pos.PosMachineData;
 import com.yumesumi.finance.money.MoneyData;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
@@ -19,6 +20,11 @@ public final class ModDataComponents {
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<BankCardData>> BANK_CARD = DATA_COMPONENTS.registerComponentType(
             "bank_card",
             builder -> builder.persistent(BankCardData.CODEC)
+    );
+
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<PosMachineData>> POS_MACHINE = DATA_COMPONENTS.registerComponentType(
+            "pos_machine",
+            builder -> builder.persistent(PosMachineData.CODEC)
     );
 
     private ModDataComponents() {

@@ -2,7 +2,7 @@
 
 Yumesumi Finance 是一个基于 **Minecraft NeoForge 1.21.1** 的金融系统模组。它为游戏加入梦澄元、实体现金、ATM、银行卡、银行账户、交易明细和玩家转账，并为后续利息、理财、股票、多币种等系统预留扩展空间。
 
-当前版本：**1.2.8**
+当前版本：**1.2.9**
 
 ## 功能
 
@@ -12,6 +12,7 @@ Yumesumi Finance 是一个基于 **Minecraft NeoForge 1.21.1** 的金融系统�
   - 纸币：1 元、2 元、5 元、10 元、20 元、50 元、100 元、500 元、1000 元
 - ATM 方块：放置后右键打开银行界面。
 - 企业注册终端方块：右键打开企业注册界面，可创建独立企业账户。
+- POS 机方块：可放置的小型收款入口；玩家手持 POS 机蹲下右键可绑定企业代码，其他玩家右键已绑定 POS 机时会打开个人银行“转账给企业”界面并预填企业代码。
 - 银行卡物品：首次使用绑定玩家 UUID，绑定后随身右键打开银行界面；他人无法使用。
 - 梦澄银行管理卡：仅 OP 可使用，右键打开梦澄银行控制台。
 - 存款与取款：
@@ -142,6 +143,7 @@ src/main/resources/assets/yumesumi_finance
 - [交易系统设计](docs/design/transactions.md)
 - [银行流水与转账设计](docs/design/bank-ledger-and-transfer.md)
 - [企业账户与原生 GUI 设计](docs/design/enterprise-accounts-and-native-gui.md)
+- [POS 机与企业收款入口设计](docs/design/pos-machine.md)
 
 ## 设计原则
 

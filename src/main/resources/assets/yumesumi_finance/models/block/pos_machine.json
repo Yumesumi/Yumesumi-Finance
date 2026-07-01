@@ -1,0 +1,22 @@
+{
+  "textures": {
+    "particle": "yumesumi_finance:block/pos_machine_top",
+    "top": "yumesumi_finance:block/pos_machine_top",
+    "front": "yumesumi_finance:block/pos_machine_front",
+    "side": "yumesumi_finance:block/pos_machine_side"
+  },
+  "elements": [
+    {
+      "from": [5, 0, 2],
+      "to": [11, 5, 14],
+      "faces": {
+        "down": { "uv": [0, 0, 16, 16], "texture": "#side", "cullface": "down" },
+        "up": { "uv": [0, 0, 16, 16], "texture": "#top" },
+        "north": { "uv": [0, 0, 16, 16], "texture": "#front" },
+        "south": { "uv": [0, 0, 16, 16], "texture": "#front" },
+        "west": { "uv": [0, 0, 16, 16], "texture": "#side" },
+        "east": { "uv": [0, 0, 16, 16], "texture": "#side" }
+      }
+    }
+  ]
+}

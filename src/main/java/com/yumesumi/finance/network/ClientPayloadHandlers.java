@@ -3,9 +3,11 @@ package com.yumesumi.finance.network;
 import com.yumesumi.finance.client.gui.BankAdminScreen;
 import com.yumesumi.finance.client.gui.BankScreen;
 import com.yumesumi.finance.client.gui.EnterpriseScreen;
+import com.yumesumi.finance.client.gui.PosMachineConfigScreen;
 import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload;
 import com.yumesumi.finance.network.payload.BankSnapshotPayload;
 import com.yumesumi.finance.network.payload.EnterpriseSnapshotPayload;
+import com.yumesumi.finance.network.payload.PosConfigPayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -46,5 +48,10 @@ public final class ClientPayloadHandlers {
                 minecraft.setScreen(new EnterpriseScreen(payload));
             }
         });
+    }
+
+    public static void handlePosConfig(PosConfigPayload payload, IPayloadContext context) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> minecraft.setScreen(new PosMachineConfigScreen(payload.hand(), payload.enterpriseCode())));
     }
 }

@@ -8,6 +8,7 @@ import com.yumesumi.finance.bank.enterprise.EnterpriseAction;
 import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionType;
 import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionRecord;
 import com.yumesumi.finance.bank.BankAccessChannel;
+import com.yumesumi.finance.bank.pos.PosMachineData;
 import com.yumesumi.finance.bank.service.ServerBankAdminService;
 import com.yumesumi.finance.bank.service.ServerEnterpriseService;
 import com.yumesumi.finance.bank.storage.BankSavedData;
@@ -20,8 +21,11 @@ import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload;
 import com.yumesumi.finance.network.payload.DepositAllRequestPayload;
 import com.yumesumi.finance.network.payload.DepositRequestPayload;
 import com.yumesumi.finance.network.payload.EnterpriseRequestPayload;
+import com.yumesumi.finance.network.payload.PosBindRequestPayload;
 import com.yumesumi.finance.network.payload.TransferRequestPayload;
 import com.yumesumi.finance.network.payload.WithdrawRequestPayload;
+import com.yumesumi.finance.registry.ModDataComponents;
+import com.yumesumi.finance.registry.ModItems;
 import com.yumesumi.finance.transaction.TransactionType;
 import com.yumesumi.finance.transaction.TransactionRecord;
 import java.math.BigInteger;
@@ -34,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -126,6 +131,33 @@ public final class ServerPayloadHandlers {
             case SET_MEMBER_ROLE -> service.setMemberRole(player, payload.enterpriseId(), payload.target(), payload.role());
             case REMOVE_MEMBER -> service.removeMember(player, payload.enterpriseId(), payload.target());
         }
+    }
+
+    public static void handlePosBind(PosBindRequestPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        ItemStack stack = player.getItemInHand(payload.hand());
+        if (!stack.is(ModItems.POS_MACHINE.get())) {
+            player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.not_held"), true);
+            return;
+        }
+        if (payload.clear()) {
+            stack.remove(ModDataComponents.POS_MACHINE.get());
+            player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.unbound"), true);
+            return;
+        }
+        String code;
+        try {
+            code = PosMachineData.sanitize(payload.enterpriseCode());
+        } catch (IllegalArgumentException exception) {
+            player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.invalid_code"), true);
+            return;
+        }
+        if (code.isBlank() || EnterpriseSavedData.get(player.server).findByCode(code).isEmpty()) {
+            player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.enterprise_not_found"), true);
+            return;
+        }
+        stack.set(ModDataComponents.POS_MACHINE.get(), new PosMachineData(code));
+        player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.bound", code), true);
     }
 
     public static void handleAdminRequest(BankAdminRequestPayload payload, IPayloadContext context) {

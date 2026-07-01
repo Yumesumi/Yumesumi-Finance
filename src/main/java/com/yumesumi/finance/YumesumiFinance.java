@@ -2,6 +2,7 @@ package com.yumesumi.finance;
 
 import com.mojang.logging.LogUtils;
 import com.yumesumi.finance.registry.ModBlocks;
+import com.yumesumi.finance.registry.ModBlockEntities;
 import com.yumesumi.finance.registry.ModCreativeTabs;
 import com.yumesumi.finance.registry.ModDataComponents;
 import com.yumesumi.finance.registry.ModItems;
@@ -19,6 +20,7 @@ public class YumesumiFinance {
 
     public YumesumiFinance(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.BLOCKS.register(modEventBus);
+        ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         ModDataComponents.DATA_COMPONENTS.register(modEventBus);

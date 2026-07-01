@@ -23,7 +23,9 @@ public record BankSnapshotPayload(
         boolean accountFrozen,
         List<InboxMessageView> inbox,
         List<EnterpriseSummaryView> enterprises,
-        boolean preferEnterprise
+        boolean preferEnterprise,
+        boolean openEnterpriseTransfer,
+        String enterpriseTransferTarget
 ) implements CustomPacketPayload {
     public static final Type<BankSnapshotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "bank_snapshot"));
     public static final StreamCodec<RegistryFriendlyByteBuf, BankSnapshotPayload> STREAM_CODEC = StreamCodec.of(
@@ -36,6 +38,8 @@ public record BankSnapshotPayload(
         transactions = List.copyOf(transactions);
         inbox = List.copyOf(inbox);
         enterprises = List.copyOf(enterprises);
+        enterpriseTransferTarget = enterpriseTransferTarget == null ? "" : enterpriseTransferTarget.trim();
+        if (enterpriseTransferTarget.length() > 16) enterpriseTransferTarget = enterpriseTransferTarget.substring(0, 16);
     }
 
     public static BankSnapshotPayload of(long balanceCents, Component message, String messageKey, BankAccessChannel channel, List<TransactionRecord> transactions) {
@@ -59,20 +63,37 @@ public record BankSnapshotPayload(
                 accountFrozen,
                 inbox,
                 enterprises,
-                preferEnterprise
+                preferEnterprise,
+                false,
+                ""
         );
     }
 
     public static BankSnapshotPayload ofViews(long balanceCents, long cashBalanceCents, Component message, String messageKey, boolean success, BankAccessChannel channel,
                                              List<BankTransactionView> transactions, boolean accountFrozen,
                                              List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise) {
+        return ofViews(balanceCents, cashBalanceCents, message, messageKey, success, channel, transactions, accountFrozen, inbox, enterprises, preferEnterprise, false);
+    }
+
+    public static BankSnapshotPayload ofViews(long balanceCents, long cashBalanceCents, Component message, String messageKey, boolean success, BankAccessChannel channel,
+                                             List<BankTransactionView> transactions, boolean accountFrozen,
+                                             List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise, boolean openEnterpriseTransfer) {
+        return ofViews(balanceCents, cashBalanceCents, message, messageKey, success, channel, transactions, accountFrozen, inbox, enterprises, preferEnterprise, openEnterpriseTransfer, "");
+    }
+
+    public static BankSnapshotPayload ofViews(long balanceCents, long cashBalanceCents, Component message, String messageKey, boolean success, BankAccessChannel channel,
+                                             List<BankTransactionView> transactions, boolean accountFrozen,
+                                             List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise,
+                                             boolean openEnterpriseTransfer, String enterpriseTransferTarget) {
         return new BankSnapshotPayload(
                 balanceCents, cashBalanceCents, message, messageKey, success, channel,
                 transactions.stream().limit(1_000).toList(),
                 accountFrozen,
                 inbox,
                 enterprises,
-                preferEnterprise
+                preferEnterprise,
+                openEnterpriseTransfer,
+                enterpriseTransferTarget
         );
     }
 
@@ -100,6 +121,8 @@ public record BankSnapshotPayload(
         buf.writeVarInt(p.enterprises().size());
         for (EnterpriseSummaryView enterprise : p.enterprises()) EnterpriseSummaryView.write(buf, enterprise);
         buf.writeBoolean(p.preferEnterprise());
+        buf.writeBoolean(p.openEnterpriseTransfer());
+        buf.writeUtf(p.enterpriseTransferTarget(), 16);
     }
 
     private static BankSnapshotPayload read(RegistryFriendlyByteBuf buf) {
@@ -123,6 +146,9 @@ public record BankSnapshotPayload(
         List<EnterpriseSummaryView> enterprises = new ArrayList<>(Math.min(enterpriseSize, 256));
         for (int i = 0; i < enterpriseSize; i++) enterprises.add(EnterpriseSummaryView.read(buf));
         boolean preferEnterprise = buf.readBoolean();
-        return new BankSnapshotPayload(balanceCents, cashBalanceCents, message, messageKey, success, channel, transactions, accountFrozen, inbox, enterprises, preferEnterprise);
+        boolean openEnterpriseTransfer = buf.readBoolean();
+        String enterpriseTransferTarget = buf.readUtf(16);
+        return new BankSnapshotPayload(balanceCents, cashBalanceCents, message, messageKey, success, channel, transactions, accountFrozen, inbox, enterprises,
+                preferEnterprise, openEnterpriseTransfer, enterpriseTransferTarget);
     }
 }

@@ -652,6 +652,11 @@ public class BankScreen extends Screen {
         inbox = payload.inbox();
         enterprises = payload.enterprises();
         selectedInbox.removeIf(id -> inbox.stream().noneMatch(message -> message.id().equals(id)));
+        if (payload.openEnterpriseTransfer() && !accountFrozen) {
+            page = Page.TRANSFER;
+            transferEnterpriseTarget = true;
+            transferTargetText = payload.enterpriseTransferTarget();
+        }
         if (accountFrozen && page != Page.HOME && page != Page.HISTORY && page != Page.INBOX) page = Page.HOME;
     }
 

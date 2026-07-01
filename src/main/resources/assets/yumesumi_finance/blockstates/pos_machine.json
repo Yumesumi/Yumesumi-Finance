@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "yumesumi_finance:block/pos_machine"
+    },
+    "facing=east": {
+      "model": "yumesumi_finance:block/pos_machine",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "yumesumi_finance:block/pos_machine",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "yumesumi_finance:block/pos_machine",
+      "y": 270
+    }
+  }
+}

@@ -34,6 +34,14 @@ public final class BankScreenAccessService {
         sendSnapshot(player, "message.yumesumi_finance.open.atm", BankAccessChannel.ATM);
     }
 
+    public static void openFromPos(ServerPlayer player) {
+        openFromPos(player, "");
+    }
+
+    public static void openFromPos(ServerPlayer player, String enterpriseCode) {
+        sendSnapshot(player, "message.yumesumi_finance.open.pos", BankAccessChannel.ATM, true, enterpriseCode);
+    }
+
     public static void openFromCard(ServerPlayer player) {
         if (openPreferredEnterprise(player)) return;
         sendSnapshot(player, "message.yumesumi_finance.open.card", BankAccessChannel.CARD);
@@ -123,6 +131,14 @@ public final class BankScreenAccessService {
     }
 
     private static void sendSnapshot(ServerPlayer player, String messageKey, BankAccessChannel channel) {
+        sendSnapshot(player, messageKey, channel, false);
+    }
+
+    private static void sendSnapshot(ServerPlayer player, String messageKey, BankAccessChannel channel, boolean openEnterpriseTransfer) {
+        sendSnapshot(player, messageKey, channel, openEnterpriseTransfer, "");
+    }
+
+    private static void sendSnapshot(ServerPlayer player, String messageKey, BankAccessChannel channel, boolean openEnterpriseTransfer, String enterpriseTransferTarget) {
         BankService bankService = service(player);
         boolean frozen = BankSavedData.get(player.server).find(player.getUUID()).map(BankAccount::frozen).orElse(false);
         EnterpriseSavedData enterpriseData = EnterpriseSavedData.get(player.server);
@@ -137,7 +153,9 @@ public final class BankScreenAccessService {
                 frozen,
                 inbox(player),
                 enterpriseSummaries(player),
-                enterpriseData.prefersEnterprise(player.getUUID())
+                enterpriseData.prefersEnterprise(player.getUUID()),
+                openEnterpriseTransfer,
+                enterpriseTransferTarget
         ));
     }
 

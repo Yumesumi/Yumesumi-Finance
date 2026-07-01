@@ -17,7 +17,7 @@
 | 交易 | `transaction`、`bank.enterprise.EnterpriseTransactionRecord` | 个人交易流水与企业流水模型 |
 | 网络 | `network`、`network.payload` | NeoForge 1.21.1 payload 注册和处理 |
 | 银行卡与入口物品 | `bank.card`、`item` | 银行卡 UUID 绑定、管理卡、随身银行入口 |
-| 方块入口 | `block` | ATM 与企业注册终端交互入口 |
+| 方块入口 | `block` | ATM、企业注册终端与 POS 机交互入口 |
 
 ## 依赖方向
 
@@ -62,5 +62,6 @@ bank.ui.BankScreenAccessService
 - [银行账户设计](bank-accounts.md)
 - [银行流水与转账设计](bank-ledger-and-transfer.md)
 - [企业账户与原生 GUI 设计](enterprise-accounts-and-native-gui.md)
+- [POS 机与企业收款入口设计](pos-machine.md)
 - [货币与实体现金设计](money-and-cash.md)
 - [交易系统设计](transactions.md)
