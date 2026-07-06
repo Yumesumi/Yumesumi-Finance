@@ -16,6 +16,8 @@ public record TransferRequestPayload(long requestId, BankAccessChannel channel, 
 
     public TransferRequestPayload {
         channel = channel == null ? BankAccessChannel.ATM : channel;
+        target = target == null ? "" : target.trim();
+        if (target.length() > 64) target = target.substring(0, 64);
         note = note == null ? "" : note.trim();
         if (note.length() > 64) note = note.substring(0, 64);
     }
@@ -32,7 +34,7 @@ public record TransferRequestPayload(long requestId, BankAccessChannel channel, 
     private static void write(RegistryFriendlyByteBuf buffer, TransferRequestPayload payload) {
         buffer.writeVarLong(payload.requestId());
         buffer.writeEnum(payload.channel());
-        buffer.writeUtf(payload.target());
+        buffer.writeUtf(payload.target(), 64);
         buffer.writeVarLong(payload.amountCents());
         buffer.writeUtf(payload.note(), 64);
         buffer.writeBoolean(payload.targetEnterprise());
@@ -44,7 +46,7 @@ public record TransferRequestPayload(long requestId, BankAccessChannel channel, 
                 buffer.readEnum(BankAccessChannel.class),
                 buffer.readUtf(64),
                 buffer.readVarLong(),
-                buffer.readUtf(),
+                buffer.readUtf(64),
                 buffer.readBoolean()
         );
     }

@@ -5,6 +5,7 @@ import com.yumesumi.finance.api.bank.BankService;
 import com.yumesumi.finance.api.money.CashWallet;
 import com.yumesumi.finance.api.transaction.TransactionRepository;
 import com.yumesumi.finance.bank.BankAccessChannel;
+import com.yumesumi.finance.bank.account.BankAccount;
 import com.yumesumi.finance.bank.storage.BankSavedData;
 import com.yumesumi.finance.money.cash.PlayerCashWallet;
 import com.yumesumi.finance.transaction.TransactionQuery;
@@ -45,6 +46,9 @@ public class ServerBankService implements BankService {
     public TransactionResult deposit(ServerPlayer player, long amountCents, BankAccessChannel channel) {
         channel = normalizeChannel(channel);
         long balance = balanceOf(player);
+        if (isFrozen(player.getUUID())) {
+            return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.account.frozen");
+        }
         if (amountCents <= 0) {
             return TransactionResult.failure(TransactionType.DEPOSIT, amountCents, balance, "message.yumesumi_finance.deposit.invalid_amount");
         }
@@ -74,6 +78,9 @@ public class ServerBankService implements BankService {
 
     @Override
     public TransactionResult depositAll(ServerPlayer player, BankAccessChannel channel) {
+        if (isFrozen(player.getUUID())) {
+            return TransactionResult.failure(TransactionType.DEPOSIT, 0L, balanceOf(player), "message.yumesumi_finance.account.frozen");
+        }
         long amountCents;
         try {
             amountCents = cashWallet.count(player);
@@ -87,6 +94,9 @@ public class ServerBankService implements BankService {
     public TransactionResult withdraw(ServerPlayer player, long amountCents, BankAccessChannel channel) {
         channel = normalizeChannel(channel);
         long balance = balanceOf(player);
+        if (isFrozen(player.getUUID())) {
+            return TransactionResult.failure(TransactionType.WITHDRAW, amountCents, balance, "message.yumesumi_finance.account.frozen");
+        }
         if (amountCents <= 0) {
             return TransactionResult.failure(TransactionType.WITHDRAW, amountCents, balance, "message.yumesumi_finance.withdraw.invalid_amount");
         }
@@ -95,10 +105,11 @@ public class ServerBankService implements BankService {
         }
 
         long newBalance = balance - amountCents;
-        applySingleAccountTransaction(player.getUUID(), TransactionType.WITHDRAW, amountCents, newBalance, channel.withdrawLedgerName(), null, "");
+        TransactionRecord record = applySingleAccountTransaction(player.getUUID(), TransactionType.WITHDRAW, amountCents, newBalance, channel.withdrawLedgerName(), null, "");
         try {
             cashWallet.give(player, amountCents);
         } catch (RuntimeException exception) {
+            removeRecord(record);
             accounts.setBalance(player.getUUID(), balance);
             throw exception;
         }
@@ -108,6 +119,9 @@ public class ServerBankService implements BankService {
     @Override
     public TransactionResult transfer(ServerPlayer player, UUID target, String targetName, long amountCents, String note) {
         long balance = balanceOf(player);
+        if (isFrozen(player.getUUID())) {
+            return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.account.frozen");
+        }
         if (amountCents <= 0) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.invalid_amount");
         }
@@ -120,8 +134,12 @@ public class ServerBankService implements BankService {
         if (BankSavedData.TREASURY_UUID.equals(target)) {
             return transferToTreasury(player, amountCents, note);
         }
-        if (accounts.find(target).isEmpty()) {
+        BankAccount receiver = accounts.find(target).orElse(null);
+        if (receiver == null) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.account_not_found");
+        }
+        if (receiver.frozen()) {
+            return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.account.frozen");
         }
         if (balance < amountCents) {
             return TransactionResult.failure(TransactionType.TRANSFER_OUT, amountCents, balance, "message.yumesumi_finance.transfer.not_enough_balance");
@@ -156,12 +174,14 @@ public class ServerBankService implements BankService {
         String safeNote = sanitizeNote(note);
         long originalSenderBalance = accounts.balanceOf(player.getUUID());
         boolean treasuryChanged = false;
+        TransactionRecord record = newRecord(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, BankSavedData.TREASURY_NAME, BankSavedData.TREASURY_UUID, safeNote);
         accounts.setBalance(player.getUUID(), senderBalance);
         try {
             savedData.addToTreasury(amountCents, player.getGameProfile().getName(), safeNote.isBlank() ? "个人转账至国库" : safeNote);
             treasuryChanged = true;
-            record(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, BankSavedData.TREASURY_NAME, BankSavedData.TREASURY_UUID, safeNote);
+            appendRecord(record);
         } catch (RuntimeException exception) {
+            removeRecord(record);
             accounts.setBalance(player.getUUID(), originalSenderBalance);
             if (treasuryChanged) {
                 savedData.addToTreasury(-amountCents, "SYSTEM", "个人转账至国库回滚");
@@ -176,12 +196,15 @@ public class ServerBankService implements BankService {
         return transactions.find(player.getUUID(), TransactionQuery.latest());
     }
 
-    private void applySingleAccountTransaction(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
+    private TransactionRecord applySingleAccountTransaction(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
         long originalBalance = accounts.balanceOf(owner);
+        TransactionRecord record = newRecord(owner, type, amountCents, balanceAfterCents, counterpartyName, counterpartyId, note);
         accounts.setBalance(owner, balanceAfterCents);
         try {
-            record(owner, type, amountCents, balanceAfterCents, counterpartyName, counterpartyId, note);
+            appendRecord(record);
+            return record;
         } catch (RuntimeException exception) {
+            removeRecord(record);
             accounts.setBalance(owner, originalBalance);
             throw exception;
         }
@@ -190,20 +213,24 @@ public class ServerBankService implements BankService {
     private void applyTransferTransaction(UUID sender, UUID receiver, long amountCents, long senderBalance, long receiverBalance, String senderName, String receiverName, String note) {
         long originalSenderBalance = accounts.balanceOf(sender);
         long originalReceiverBalance = accounts.balanceOf(receiver);
+        TransactionRecord senderRecord = newRecord(sender, TransactionType.TRANSFER_OUT, amountCents, senderBalance, receiverName, receiver, note);
+        TransactionRecord receiverRecord = newRecord(receiver, TransactionType.TRANSFER_IN, amountCents, receiverBalance, senderName, sender, note);
         accounts.setBalance(sender, senderBalance);
         try {
             accounts.setBalance(receiver, receiverBalance);
-            record(sender, TransactionType.TRANSFER_OUT, amountCents, senderBalance, receiverName, receiver, note);
-            record(receiver, TransactionType.TRANSFER_IN, amountCents, receiverBalance, senderName, sender, note);
+            appendRecord(senderRecord);
+            appendRecord(receiverRecord);
         } catch (RuntimeException exception) {
+            removeRecord(senderRecord);
+            removeRecord(receiverRecord);
             accounts.setBalance(sender, originalSenderBalance);
             accounts.setBalance(receiver, originalReceiverBalance);
             throw exception;
         }
     }
 
-    private void record(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
-        transactions.append(new TransactionRecord(
+    private TransactionRecord newRecord(UUID owner, TransactionType type, long amountCents, long balanceAfterCents, String counterpartyName, UUID counterpartyId, String note) {
+        return new TransactionRecord(
                 UUID.randomUUID(),
                 owner,
                 type,
@@ -213,12 +240,26 @@ public class ServerBankService implements BankService {
                 counterpartyName,
                 counterpartyId,
                 note
-        ));
+        );
+    }
+
+    private void appendRecord(TransactionRecord record) {
+        transactions.append(record);
+    }
+
+    private void removeRecord(TransactionRecord record) {
+        if (record != null && transactions instanceof BankSavedData savedData) {
+            savedData.removeTransaction(record.id());
+        }
     }
 
     private static String sanitizeNote(String note) {
         String trimmed = note == null ? "" : note.trim();
         return trimmed.length() <= 64 ? trimmed : trimmed.substring(0, 64);
+    }
+
+    private boolean isFrozen(UUID owner) {
+        return accounts.find(owner).map(BankAccount::frozen).orElse(false);
     }
 
     private static BankAccessChannel normalizeChannel(BankAccessChannel channel) {

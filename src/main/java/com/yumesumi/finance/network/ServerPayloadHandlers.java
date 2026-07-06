@@ -2,19 +2,13 @@ package com.yumesumi.finance.network;
 
 import com.yumesumi.finance.bank.account.BankAccount;
 import com.yumesumi.finance.bank.admin.BankAccountQuery;
-import com.yumesumi.finance.bank.admin.BankAdminAction;
-import com.yumesumi.finance.bank.enterprise.EnterpriseAccount;
 import com.yumesumi.finance.bank.enterprise.EnterpriseAction;
-import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionType;
-import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionRecord;
 import com.yumesumi.finance.bank.BankAccessChannel;
 import com.yumesumi.finance.bank.pos.PosMachineData;
 import com.yumesumi.finance.bank.service.ServerBankAdminService;
 import com.yumesumi.finance.bank.service.ServerEnterpriseService;
 import com.yumesumi.finance.bank.storage.BankSavedData;
 import com.yumesumi.finance.bank.storage.EnterpriseSavedData;
-import com.yumesumi.finance.bank.transfer.TransferTargetResolver;
-import com.yumesumi.finance.bank.transfer.TransferTarget;
 import com.yumesumi.finance.bank.ui.BankScreenAccessService;
 import com.yumesumi.finance.network.payload.BankAdminRequestPayload;
 import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload;
@@ -26,8 +20,6 @@ import com.yumesumi.finance.network.payload.TransferRequestPayload;
 import com.yumesumi.finance.network.payload.WithdrawRequestPayload;
 import com.yumesumi.finance.registry.ModDataComponents;
 import com.yumesumi.finance.registry.ModItems;
-import com.yumesumi.finance.transaction.TransactionType;
-import com.yumesumi.finance.transaction.TransactionRecord;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -44,6 +36,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public final class ServerPayloadHandlers {
     private static final int MAX_REMEMBERED_REQUESTS = 128;
+    private static final int MAX_TRACKED_PLAYERS = 2048;
     private static final Map<UUID, PlayerRequestIds> PROCESSED_REQUESTS = new HashMap<>();
 
     private ServerPayloadHandlers() {}
@@ -135,6 +128,7 @@ public final class ServerPayloadHandlers {
 
     public static void handlePosBind(PosBindRequestPayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)) return;
+        if (!accept(player, payload.requestId())) return;
         ItemStack stack = player.getItemInHand(payload.hand());
         if (!stack.is(ModItems.POS_MACHINE.get())) {
             player.displayClientMessage(Component.translatable("message.yumesumi_finance.pos.not_held"), true);
@@ -174,21 +168,21 @@ public final class ServerPayloadHandlers {
                 case TREASURY_INFO -> sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.treasury");
                 case UPDATE_NOTE -> {
                     if (payload.targetOwner() != null) {
-                        if (handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         adminService.updateAdminNote(payload.targetOwner(), payload.text());
                         sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.note_updated");
                     }
                 }
                 case SET_BALANCE -> {
                     if (payload.targetOwner() != null) {
-                        if (handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         adminService.setAccountBalance(payload.targetOwner(), payload.amountCents());
                         sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.balance_set");
                     }
                 }
                 case ADD_BALANCE -> {
                     if (payload.targetOwner() != null) {
-                        if (!BankSavedData.TREASURY_UUID.equals(payload.targetOwner()) && handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (!BankSavedData.TREASURY_UUID.equals(payload.targetOwner()) && sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         if (BankSavedData.TREASURY_UUID.equals(payload.targetOwner())) {
                             BigInteger delta = payload.text().isBlank() ? BigInteger.valueOf(payload.amountCents()) : new BigInteger(payload.text());
                             adminService.adjustTreasury(delta, player.getGameProfile().getName());
@@ -204,26 +198,26 @@ public final class ServerPayloadHandlers {
                     sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.balance_set");
                 }
                 case TREASURY_TRANSFER -> {
-                    handleTreasuryTransfer(player, payload);
+                    adminService.transferFromTreasury(player.server, player, payload.amountCents(), payload.text());
                     sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.treasury_transfer_done");
                 }
                 case TOGGLE_FREEZE -> {
                     if (payload.targetOwner() != null) {
-                        if (handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         adminService.toggleFreeze(payload.targetOwner());
                         sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.freeze_toggled");
                     }
                 }
                 case DELETE -> {
                     if (payload.targetOwner() != null) {
-                        if (handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         adminService.deleteAccount(payload.targetOwner(), false);
                         sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.deleted");
                     }
                 }
                 case DELETE_CONFIRMED -> {
                     if (payload.targetOwner() != null) {
-                        if (handleEnterpriseAdminAction(player, payload, adminService)) return;
+                        if (sendEnterpriseAdminSnapshotIfHandled(player, payload, adminService)) return;
                         adminService.deleteAccountConfirmed(payload.targetOwner());
                         sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.deleted");
                     }
@@ -234,40 +228,6 @@ public final class ServerPayloadHandlers {
         } catch (Exception e) {
             sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.error");
         }
-    }
-
-
-    private static void handleTreasuryTransfer(ServerPlayer player, BankAdminRequestPayload payload) {
-        if (payload.amountCents() <= 0) throw new IllegalArgumentException("Invalid amount");
-        String[] parts = payload.text().split("\\|", 2);
-        String targetText = parts.length > 0 ? parts[0].trim() : "";
-        String note = parts.length > 1 ? parts[1].trim() : "";
-        if (targetText.isBlank()) throw new IllegalArgumentException("Target required");
-        if (note.length() > 64) note = note.substring(0, 64);
-        BankSavedData bankData = BankSavedData.get(player.server);
-        EnterpriseSavedData enterpriseData = EnterpriseSavedData.get(player.server);
-        EnterpriseAccount enterprise = enterpriseData.findByCode(targetText).orElse(null);
-        String operatorName = player.getGameProfile().getName();
-        if (enterprise != null) {
-            long newBalance = Math.addExact(enterprise.balanceCents(), payload.amountCents());
-            enterprise.setBalanceCents(newBalance);
-            enterprise.appendTransaction(new EnterpriseTransactionRecord(UUID.randomUUID(), enterprise.id(), EnterpriseTransactionType.TRANSFER_IN,
-                    payload.amountCents(), newBalance, player.getUUID(), operatorName, BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME,
-                    note.isBlank() ? "\u56fd\u5e93\u8f6c\u8d26" : note, System.currentTimeMillis()));
-            enterpriseData.setDirtyAndTouch(enterprise);
-            bankData.addToTreasury(-payload.amountCents(), operatorName, "\u56fd\u5e93\u8f6c\u8d26\u81f3\u4f01\u4e1a " + enterprise.code());
-            return;
-        }
-        TransferTarget target = TransferTargetResolver.resolve(player.server, targetText).orElse(null);
-        if (target == null || BankSavedData.TREASURY_UUID.equals(target.owner()) || bankData.find(target.owner()).isEmpty()) {
-            throw new IllegalArgumentException("Target account not found");
-        }
-        long newBalance = Math.addExact(bankData.balanceOf(target.owner()), payload.amountCents());
-        bankData.setBalance(target.owner(), newBalance);
-        bankData.append(new TransactionRecord(UUID.randomUUID(), target.owner(), TransactionType.TRANSFER_IN, payload.amountCents(), newBalance,
-                System.currentTimeMillis(), BankSavedData.TREASURY_NAME, BankSavedData.TREASURY_UUID,
-                note.isBlank() ? "\u56fd\u5e93\u8f6c\u8d26" : note));
-        bankData.addToTreasury(-payload.amountCents(), operatorName, "\u56fd\u5e93\u8f6c\u8d26\u81f3\u73a9\u5bb6 " + target.displayName());
     }
 
     private static boolean isFrozen(ServerPlayer player) {
@@ -316,63 +276,26 @@ public final class ServerPayloadHandlers {
         ));
     }
 
-    private static boolean handleEnterpriseAdminAction(ServerPlayer player, BankAdminRequestPayload payload, ServerBankAdminService adminService) {
-        EnterpriseSavedData enterpriseData = EnterpriseSavedData.get(player.server);
-        EnterpriseAccount enterprise = enterpriseData.findEnterprise(payload.targetOwner()).orElse(null);
-        if (enterprise == null) return false;
-        try {
-            switch (payload.action()) {
-                case UPDATE_NOTE -> {
-                    enterpriseData.updateEnterpriseSettings(enterprise, enterprise.name(), enterprise.code(), payload.text());
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.note_updated");
-                    return true;
-                }
-                case SET_BALANCE -> {
-                    enterprise.setBalanceCents(payload.amountCents());
-                    enterpriseData.setDirtyAndTouch(enterprise);
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.balance_set");
-                    return true;
-                }
-                case ADD_BALANCE -> {
-                    enterprise.setBalanceCents(Math.addExact(enterprise.balanceCents(), payload.amountCents()));
-                    enterpriseData.setDirtyAndTouch(enterprise);
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.balance_added");
-                    return true;
-                }
-                case TOGGLE_FREEZE -> {
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.unsupported_enterprise_freeze");
-                    return true;
-                }
-                case DELETE -> {
-                    if (enterprise.balanceCents() != 0) throw new IllegalStateException("Enterprise has balance");
-                    enterpriseData.deleteEnterprise(enterprise);
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.deleted");
-                    return true;
-                }
-                case DELETE_CONFIRMED -> {
-                    if (enterprise.balanceCents() > 0) {
-                        BankSavedData.get(player.server).addToTreasury(enterprise.balanceCents(), player.getGameProfile().getName(), "管理员删除企业余额转入国库：" + enterprise.code());
-                    }
-                    enterpriseData.deleteEnterprise(enterprise);
-                    sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.deleted");
-                    return true;
-                }
-                default -> {
-                    return false;
-                }
-            }
-        } catch (IllegalStateException exception) {
-            sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.needs_confirm");
-            return true;
-        } catch (Exception exception) {
-            sendAdminSnapshot(player, adminService, "message.yumesumi_finance.admin.error");
-            return true;
-        }
+    private static boolean sendEnterpriseAdminSnapshotIfHandled(ServerPlayer player, BankAdminRequestPayload payload, ServerBankAdminService adminService) {
+        java.util.Optional<String> messageKey = adminService.handleEnterpriseAction(player.server, player, payload.targetOwner(),
+                payload.action(), payload.amountCents(), payload.text());
+        if (messageKey.isEmpty()) return false;
+        sendAdminSnapshot(player, adminService, messageKey.get());
+        return true;
     }
 
     private static boolean accept(ServerPlayer player, long requestId) {
         if (requestId <= 0) return false;
+        if (PROCESSED_REQUESTS.size() > MAX_TRACKED_PLAYERS) {
+            pruneOfflineRequestIds(player);
+        }
         return PROCESSED_REQUESTS.computeIfAbsent(player.getUUID(), ignored -> new PlayerRequestIds()).accept(requestId);
+    }
+
+    private static void pruneOfflineRequestIds(ServerPlayer currentPlayer) {
+        UUID currentPlayerId = currentPlayer.getUUID();
+        PROCESSED_REQUESTS.keySet().removeIf(playerId ->
+                !playerId.equals(currentPlayerId) && currentPlayer.server.getPlayerList().getPlayer(playerId) == null);
     }
 
     private static final class PlayerRequestIds {

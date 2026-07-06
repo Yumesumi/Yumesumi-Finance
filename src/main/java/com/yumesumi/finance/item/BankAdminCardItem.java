@@ -1,6 +1,7 @@
 package com.yumesumi.finance.item;
 
 import com.yumesumi.finance.bank.admin.BankAdminAction;
+import com.yumesumi.finance.network.ClientRequestIds;
 import com.yumesumi.finance.network.payload.BankAdminRequestPayload;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,8 +22,7 @@ public class BankAdminCardItem extends Item {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (level.isClientSide()) {
-            long requestId = System.nanoTime() & Long.MAX_VALUE;
-            PacketDistributor.sendToServer(new BankAdminRequestPayload(requestId, BankAdminAction.LIST, null, 0, ""));
+            PacketDistributor.sendToServer(new BankAdminRequestPayload(ClientRequestIds.next(), BankAdminAction.LIST, null, 0, ""));
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }

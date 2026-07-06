@@ -24,10 +24,13 @@ public record EnterpriseDetailView(
         List<EnterpriseTransactionView> transactions,
         List<Long> balanceSeries
 ) {
+    private static final int MAX_VISIBLE_TRANSACTIONS = 1_000;
+    private static final int MAX_BALANCE_SERIES = 64;
+
     public EnterpriseDetailView {
-        members = List.copyOf(members);
-        transactions = List.copyOf(transactions);
-        balanceSeries = List.copyOf(balanceSeries);
+        members = List.copyOf((members == null ? List.<EnterpriseMemberView>of() : members).stream().limit(EnterpriseAccount.MAX_MEMBERS).toList());
+        transactions = List.copyOf((transactions == null ? List.<EnterpriseTransactionView>of() : transactions).stream().limit(MAX_VISIBLE_TRANSACTIONS).toList());
+        balanceSeries = List.copyOf((balanceSeries == null ? List.<Long>of() : balanceSeries).stream().limit(MAX_BALANCE_SERIES).toList());
     }
 
     public static EnterpriseDetailView from(EnterpriseAccount account, EnterpriseRole role, String ownerName, List<Long> balanceSeries) {
@@ -45,7 +48,7 @@ public record EnterpriseDetailView(
                 account.createdAt(),
                 account.lastActiveAt(),
                 account.members().stream().map(EnterpriseMemberView::from).toList(),
-                account.transactions().stream().limit(10_000).map(EnterpriseTransactionView::from).toList(),
+                account.recentTransactions(MAX_VISIBLE_TRANSACTIONS).stream().map(EnterpriseTransactionView::from).toList(),
                 balanceSeries
         );
     }
@@ -86,13 +89,22 @@ public record EnterpriseDetailView(
         long lastActiveAt = buf.readVarLong();
         int memberSize = Math.max(0, buf.readVarInt());
         List<EnterpriseMemberView> members = new ArrayList<>(Math.min(memberSize, EnterpriseAccount.MAX_MEMBERS));
-        for (int i = 0; i < memberSize; i++) members.add(EnterpriseMemberView.read(buf));
+        for (int i = 0; i < memberSize; i++) {
+            EnterpriseMemberView member = EnterpriseMemberView.read(buf);
+            if (i < EnterpriseAccount.MAX_MEMBERS) members.add(member);
+        }
         int transactionSize = Math.max(0, buf.readVarInt());
-        List<EnterpriseTransactionView> transactions = new ArrayList<>(Math.min(transactionSize, EnterpriseAccount.MAX_LEDGER_RECORDS));
-        for (int i = 0; i < transactionSize; i++) transactions.add(EnterpriseTransactionView.read(buf));
+        List<EnterpriseTransactionView> transactions = new ArrayList<>(Math.min(transactionSize, MAX_VISIBLE_TRANSACTIONS));
+        for (int i = 0; i < transactionSize; i++) {
+            EnterpriseTransactionView transaction = EnterpriseTransactionView.read(buf);
+            if (i < MAX_VISIBLE_TRANSACTIONS) transactions.add(transaction);
+        }
         int seriesSize = Math.max(0, buf.readVarInt());
-        List<Long> series = new ArrayList<>(Math.min(seriesSize, 64));
-        for (int i = 0; i < seriesSize; i++) series.add(buf.readVarLong());
+        List<Long> series = new ArrayList<>(Math.min(seriesSize, MAX_BALANCE_SERIES));
+        for (int i = 0; i < seriesSize; i++) {
+            long value = buf.readVarLong();
+            if (i < MAX_BALANCE_SERIES) series.add(value);
+        }
         return new EnterpriseDetailView(id, code, name, description, balance, ownerId, ownerName, role, memberCount, maxMembers, createdAt, lastActiveAt, members, transactions, series);
     }
 }

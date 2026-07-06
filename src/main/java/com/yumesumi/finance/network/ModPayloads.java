@@ -21,7 +21,7 @@ public final class ModPayloads {
     private ModPayloads() {}
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        PayloadRegistrar registrar = event.registrar("2");
         registrar.playToClient(BankSnapshotPayload.TYPE, BankSnapshotPayload.STREAM_CODEC, ModPayloads::handleBankSnapshotClient);
         registrar.playToClient(BankAdminSnapshotPayload.TYPE, BankAdminSnapshotPayload.STREAM_CODEC, ModPayloads::handleAdminSnapshotClient);
         registrar.playToClient(EnterpriseSnapshotPayload.TYPE, EnterpriseSnapshotPayload.STREAM_CODEC, ModPayloads::handleEnterpriseSnapshotClient);

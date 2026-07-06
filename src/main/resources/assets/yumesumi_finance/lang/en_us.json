@@ -43,6 +43,7 @@
   "message.yumesumi_finance.transfer.self": "You cannot transfer to yourself.",
   "message.yumesumi_finance.transfer.not_enough_balance": "Insufficient balance for this transfer.",
   "message.yumesumi_finance.transfer.too_large": "The recipient balance is too large to complete this transfer.",
+  "message.yumesumi_finance.transfer.failed": "Transfer failed; funds were rolled back.",
   "message.yumesumi_finance.transfer.success": "Transferred %1$s to %2$s.",
   "message.yumesumi_finance.transaction.deposit": "Deposit",
   "message.yumesumi_finance.transaction.withdraw": "Withdraw",

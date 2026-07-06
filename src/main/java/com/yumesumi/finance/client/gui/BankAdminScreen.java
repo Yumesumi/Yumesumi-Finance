@@ -5,6 +5,7 @@ import com.yumesumi.finance.bank.admin.BankAccountSortField;
 import com.yumesumi.finance.bank.admin.BankAdminAction;
 import com.yumesumi.finance.client.gui.foundation.FinanceTheme;
 import com.yumesumi.finance.money.MoneyFormatter;
+import com.yumesumi.finance.network.ClientRequestIds;
 import com.yumesumi.finance.network.payload.BankAdminRequestPayload;
 import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload;
 import com.yumesumi.finance.network.payload.BankAdminSnapshotPayload.BankAccountView;
@@ -74,8 +75,6 @@ public class BankAdminScreen extends Screen {
     private Component statusMessage = Component.empty();
     private int statusTimer;
     private EditBox searchBox;
-    private long requestCounter = System.nanoTime() & Long.MAX_VALUE;
-
     public BankAdminScreen(BankAdminSnapshotPayload payload) {
         super(Component.translatable("screen.yumesumi_finance.admin.title"));
         apply(payload);
@@ -565,7 +564,7 @@ public class BankAdminScreen extends Screen {
     private String formatTime(long ms) { if (ms <= 0) return "-"; return TIME_FMT.format(Instant.ofEpochMilli(ms)); }
     private String fitText(String text, int maxW) { if (font.width(text) <= maxW) return text; String s = text; while (!s.isEmpty() && font.width(s + "...") > maxW) s = s.substring(0, s.length() - 1); return s + "..."; }
     private void send(BankAdminRequestPayload p) { PacketDistributor.sendToServer(p); }
-    private long nextId() { requestCounter++; if (requestCounter <= 0) requestCounter = 1; return requestCounter; }
+    private long nextId() { return ClientRequestIds.next(); }
     private void setStatus(String msg) { setStatus(Component.literal(msg)); }
     private void setStatus(Component msg) { statusMessage = msg == null ? Component.empty() : msg; statusTimer = 80; }
     private void clearStatus() { statusMessage = Component.empty(); statusTimer = 0; }

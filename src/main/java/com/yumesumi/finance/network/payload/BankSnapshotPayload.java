@@ -28,6 +28,9 @@ public record BankSnapshotPayload(
         String enterpriseTransferTarget
 ) implements CustomPacketPayload {
     public static final Type<BankSnapshotPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "bank_snapshot"));
+    private static final int MAX_TRANSACTIONS = 1_000;
+    private static final int MAX_INBOX_MESSAGES = 100;
+    private static final int MAX_ENTERPRISE_SUMMARIES = 256;
     public static final StreamCodec<RegistryFriendlyByteBuf, BankSnapshotPayload> STREAM_CODEC = StreamCodec.of(
             BankSnapshotPayload::write, BankSnapshotPayload::read
     );
@@ -35,9 +38,9 @@ public record BankSnapshotPayload(
     public BankSnapshotPayload {
         messageKey = messageKey == null ? "" : messageKey;
         channel = channel == null ? BankAccessChannel.ATM : channel;
-        transactions = List.copyOf(transactions);
-        inbox = List.copyOf(inbox);
-        enterprises = List.copyOf(enterprises);
+        transactions = List.copyOf((transactions == null ? List.<BankTransactionView>of() : transactions).stream().limit(MAX_TRANSACTIONS).toList());
+        inbox = List.copyOf((inbox == null ? List.<InboxMessageView>of() : inbox).stream().limit(MAX_INBOX_MESSAGES).toList());
+        enterprises = List.copyOf((enterprises == null ? List.<EnterpriseSummaryView>of() : enterprises).stream().limit(MAX_ENTERPRISE_SUMMARIES).toList());
         enterpriseTransferTarget = enterpriseTransferTarget == null ? "" : enterpriseTransferTarget.trim();
         if (enterpriseTransferTarget.length() > 16) enterpriseTransferTarget = enterpriseTransferTarget.substring(0, 16);
     }
@@ -59,7 +62,7 @@ public record BankSnapshotPayload(
                                          List<InboxMessageView> inbox, List<EnterpriseSummaryView> enterprises, boolean preferEnterprise) {
         return ofViews(
                 balanceCents, cashBalanceCents, message, messageKey, success, channel,
-                transactions.stream().limit(1_000).map(BankTransactionView::from).toList(),
+                transactions.stream().limit(MAX_TRANSACTIONS).map(BankTransactionView::from).toList(),
                 accountFrozen,
                 inbox,
                 enterprises,
@@ -87,7 +90,7 @@ public record BankSnapshotPayload(
                                              boolean openEnterpriseTransfer, String enterpriseTransferTarget) {
         return new BankSnapshotPayload(
                 balanceCents, cashBalanceCents, message, messageKey, success, channel,
-                transactions.stream().limit(1_000).toList(),
+                transactions.stream().limit(MAX_TRANSACTIONS).toList(),
                 accountFrozen,
                 inbox,
                 enterprises,
@@ -133,18 +136,24 @@ public record BankSnapshotPayload(
         boolean success = buf.readBoolean();
         BankAccessChannel channel = buf.readEnum(BankAccessChannel.class);
         int size = Math.max(0, buf.readVarInt());
-        List<BankTransactionView> transactions = new ArrayList<>(Math.min(size, 1_000));
+        List<BankTransactionView> transactions = new ArrayList<>(Math.min(size, MAX_TRANSACTIONS));
         for (int i = 0; i < size; i++) {
             BankTransactionView t = BankTransactionView.read(buf);
-            if (i < 1_000) transactions.add(t);
+            if (i < MAX_TRANSACTIONS) transactions.add(t);
         }
         boolean accountFrozen = buf.readBoolean();
         int inboxSize = Math.max(0, buf.readVarInt());
-        List<InboxMessageView> inbox = new ArrayList<>(Math.min(inboxSize, 256));
-        for (int i = 0; i < inboxSize; i++) inbox.add(InboxMessageView.read(buf));
+        List<InboxMessageView> inbox = new ArrayList<>(Math.min(inboxSize, MAX_INBOX_MESSAGES));
+        for (int i = 0; i < inboxSize; i++) {
+            InboxMessageView messageView = InboxMessageView.read(buf);
+            if (i < MAX_INBOX_MESSAGES) inbox.add(messageView);
+        }
         int enterpriseSize = Math.max(0, buf.readVarInt());
-        List<EnterpriseSummaryView> enterprises = new ArrayList<>(Math.min(enterpriseSize, 256));
-        for (int i = 0; i < enterpriseSize; i++) enterprises.add(EnterpriseSummaryView.read(buf));
+        List<EnterpriseSummaryView> enterprises = new ArrayList<>(Math.min(enterpriseSize, MAX_ENTERPRISE_SUMMARIES));
+        for (int i = 0; i < enterpriseSize; i++) {
+            EnterpriseSummaryView enterprise = EnterpriseSummaryView.read(buf);
+            if (i < MAX_ENTERPRISE_SUMMARIES) enterprises.add(enterprise);
+        }
         boolean preferEnterprise = buf.readBoolean();
         boolean openEnterpriseTransfer = buf.readBoolean();
         String enterpriseTransferTarget = buf.readUtf(16);

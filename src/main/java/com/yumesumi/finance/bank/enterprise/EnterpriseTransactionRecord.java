@@ -19,6 +19,8 @@ public record EnterpriseTransactionRecord(
         if (id == null) id = UUID.randomUUID();
         if (enterpriseId == null) throw new IllegalArgumentException("Enterprise id cannot be null");
         if (type == null) throw new IllegalArgumentException("Enterprise transaction type cannot be null");
+        if (amountCents <= 0) throw new IllegalArgumentException("Enterprise transaction amount must be positive");
+        if (balanceAfterCents < 0) throw new IllegalArgumentException("Enterprise transaction balance cannot be negative");
         operatorName = operatorName == null ? "" : operatorName;
         counterpartyName = counterpartyName == null ? "" : counterpartyName;
         note = note == null ? "" : note;

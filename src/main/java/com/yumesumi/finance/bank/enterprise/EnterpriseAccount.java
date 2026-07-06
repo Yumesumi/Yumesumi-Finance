@@ -1,7 +1,6 @@
 package com.yumesumi.finance.bank.enterprise;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +26,7 @@ public class EnterpriseAccount {
     public EnterpriseAccount(UUID id, String code, String name, String description, long balanceCents, UUID ownerId, long createdAt) {
         if (id == null) throw new IllegalArgumentException("Enterprise id cannot be null");
         if (ownerId == null) throw new IllegalArgumentException("Enterprise owner cannot be null");
+        if (balanceCents < 0) throw new IllegalArgumentException("Enterprise balance cannot be negative");
         this.id = id;
         this.code = normalizeCode(code);
         this.name = sanitizeName(name);
@@ -48,6 +48,10 @@ public class EnterpriseAccount {
     public int memberCount() { return members.size(); }
     public List<EnterpriseMember> members() { return List.copyOf(members.values()); }
     public List<EnterpriseTransactionRecord> transactions() { return List.copyOf(transactions); }
+    public List<EnterpriseTransactionRecord> recentTransactions(int limit) {
+        if (limit <= 0 || transactions.isEmpty()) return List.of();
+        return List.copyOf(transactions.subList(0, Math.min(limit, transactions.size())));
+    }
 
     public void setCode(String code) { this.code = normalizeCode(code); }
     public void setName(String name) { this.name = sanitizeName(name); }
@@ -96,12 +100,22 @@ public class EnterpriseAccount {
     }
 
     public void appendTransaction(EnterpriseTransactionRecord record) {
-        transactions.add(record);
-        transactions.sort(Comparator.comparingLong(EnterpriseTransactionRecord::createdAt).reversed());
+        int index = 0;
+        while (index < transactions.size() && transactions.get(index).createdAt() >= record.createdAt()) {
+            index++;
+        }
+        transactions.add(index, record);
         while (transactions.size() > MAX_LEDGER_RECORDS) {
             transactions.remove(transactions.size() - 1);
         }
         touch();
+    }
+
+    public void removeTransaction(UUID recordId) {
+        if (recordId == null) return;
+        if (transactions.removeIf(record -> record.id().equals(recordId))) {
+            touch();
+        }
     }
 
     private static String sanitizeName(String value) {

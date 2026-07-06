@@ -6,6 +6,7 @@ import com.yumesumi.finance.bank.enterprise.EnterpriseScreenMode;
 import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionRecord;
 import com.yumesumi.finance.bank.enterprise.EnterpriseTransactionType;
 import com.yumesumi.finance.bank.BankAccessChannel;
+import com.yumesumi.finance.bank.account.BankAccount;
 import com.yumesumi.finance.bank.inbox.InboxMessage;
 import com.yumesumi.finance.bank.inbox.InboxMessageType;
 import com.yumesumi.finance.bank.storage.BankSavedData;
@@ -19,9 +20,10 @@ import com.yumesumi.finance.transaction.TransactionRecord;
 import com.yumesumi.finance.transaction.TransactionResult;
 import com.yumesumi.finance.transaction.TransactionType;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -60,6 +62,7 @@ public class ServerEnterpriseService {
     }
 
     public void openRegister(ServerPlayer player) {
+        pruneTerminalRegistrationAccess();
         TERMINAL_REGISTRATION_ACCESS.add(player.getUUID());
         sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, "", false, "message.yumesumi_finance.enterprise.register.open", true);
     }
@@ -80,6 +83,10 @@ public class ServerEnterpriseService {
             openList(player, "message.yumesumi_finance.enterprise.register_terminal_only");
             return;
         }
+        if (bankData.find(player.getUUID()).map(com.yumesumi.finance.bank.account.BankAccount::frozen).orElse(false)) {
+            sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, "message.yumesumi_finance.account.frozen", false);
+            return;
+        }
         try {
             if (!enterprises.isCodeAvailable(code, null)) {
                 sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, "message.yumesumi_finance.enterprise.code_unavailable", false);
@@ -94,27 +101,36 @@ public class ServerEnterpriseService {
             return;
         }
 
+        EnterpriseAccount account;
+        try {
+            account = enterprises.createEnterprise(code, name, description, player.getUUID(), player.getGameProfile().getName());
+        } catch (RuntimeException exception) {
+            sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, "message.yumesumi_finance.enterprise.create_failed", false);
+            return;
+        }
+
         ServerBankService bankService = ServerBankService.forServerPlayer(player);
-        TransactionResult feeResult = bankService.transfer(player, BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME,
-                EnterpriseSavedData.REGISTRATION_FEE_CENTS, "企业注册费");
+        TransactionResult feeResult;
+        try {
+            feeResult = bankService.transfer(player, BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME,
+                    EnterpriseSavedData.REGISTRATION_FEE_CENTS, "企业注册费");
+        } catch (RuntimeException exception) {
+            enterprises.deleteEnterprise(account);
+            sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, "message.yumesumi_finance.enterprise.create_failed", false);
+            return;
+        }
         if (!feeResult.success()) {
+            enterprises.deleteEnterprise(account);
             sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, feeResult.messageKey(), false);
             return;
         }
 
-        try {
-            EnterpriseAccount account = enterprises.createEnterprise(code, name, description, player.getUUID(), player.getGameProfile().getName());
-            account.appendTransaction(new EnterpriseTransactionRecord(UUID.randomUUID(), account.id(), EnterpriseTransactionType.REGISTER_FEE,
-                    EnterpriseSavedData.REGISTRATION_FEE_CENTS, 0L, player.getUUID(), player.getGameProfile().getName(),
-                    BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME, "企业注册费", System.currentTimeMillis()));
-            enterprises.setDirtyAndTouch(account);
-            TERMINAL_REGISTRATION_ACCESS.remove(player.getUUID());
-            openDetail(player, account.id(), "message.yumesumi_finance.enterprise.created");
-        } catch (RuntimeException exception) {
-            bankData.addToTreasury(-EnterpriseSavedData.REGISTRATION_FEE_CENTS, "SYSTEM", "企业注册失败退回注册费");
-            bankData.setBalance(player.getUUID(), Math.addExact(bankData.balanceOf(player.getUUID()), EnterpriseSavedData.REGISTRATION_FEE_CENTS));
-            sendSnapshot(player, EnterpriseScreenMode.REGISTER, null, code, false, "message.yumesumi_finance.enterprise.create_failed", false);
-        }
+        account.appendTransaction(new EnterpriseTransactionRecord(UUID.randomUUID(), account.id(), EnterpriseTransactionType.REGISTER_FEE,
+                EnterpriseSavedData.REGISTRATION_FEE_CENTS, 0L, player.getUUID(), player.getGameProfile().getName(),
+                BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME, "企业注册费", System.currentTimeMillis()));
+        enterprises.setDirtyAndTouch(account);
+        TERMINAL_REGISTRATION_ACCESS.remove(player.getUUID());
+        openDetail(player, account.id(), "message.yumesumi_finance.enterprise.created");
     }
 
     public void openDetail(ServerPlayer player, UUID enterpriseId, String messageKey) {
@@ -226,6 +242,10 @@ public class ServerEnterpriseService {
 
     public void transferPersonalToEnterprise(ServerPlayer player, BankAccessChannel channel, String code, long amountCents, String note) {
         note = sanitizeNote(note);
+        if (bankData.find(player.getUUID()).map(BankAccount::frozen).orElse(false)) {
+            sendPersonalTransferSnapshot(player, channel, "message.yumesumi_finance.account.frozen", false);
+            return;
+        }
         EnterpriseAccount target = enterprises.findByCode(code).orElse(null);
         if (target == null) {
             sendPersonalTransferSnapshot(player, channel, "message.yumesumi_finance.transfer.account_not_found", false);
@@ -248,11 +268,24 @@ public class ServerEnterpriseService {
             return;
         }
         long senderBalance = balance - amountCents;
-        bankData.setBalance(player.getUUID(), senderBalance);
-        target.setBalanceCents(enterpriseBalance);
-        recordPersonal(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, target.name(), target.id(), note);
-        recordEnterprise(target, EnterpriseTransactionType.TRANSFER_IN, amountCents, enterpriseBalance, player.getUUID(), player.getGameProfile().getName(), player.getUUID(), player.getGameProfile().getName(), note);
-        enterprises.setDirtyAndTouch(target);
+        long originalEnterpriseBalance = target.balanceCents();
+        TransactionRecord personalRecord = null;
+        EnterpriseTransactionRecord enterpriseRecord = null;
+        try {
+            bankData.setBalance(player.getUUID(), senderBalance);
+            target.setBalanceCents(enterpriseBalance);
+            personalRecord = recordPersonal(player.getUUID(), TransactionType.TRANSFER_OUT, amountCents, senderBalance, target.name(), target.id(), note);
+            enterpriseRecord = recordEnterprise(target, EnterpriseTransactionType.TRANSFER_IN, amountCents, enterpriseBalance, player.getUUID(), player.getGameProfile().getName(), player.getUUID(), player.getGameProfile().getName(), note);
+            enterprises.setDirtyAndTouch(target);
+        } catch (RuntimeException exception) {
+            if (personalRecord != null) bankData.removeTransaction(personalRecord.id());
+            if (enterpriseRecord != null) target.removeTransaction(enterpriseRecord.id());
+            bankData.setBalance(player.getUUID(), balance);
+            target.setBalanceCents(originalEnterpriseBalance);
+            enterprises.setDirtyAndTouch(target);
+            sendPersonalTransferSnapshot(player, channel, "message.yumesumi_finance.transfer.failed", false);
+            return;
+        }
         sendPersonalTransferSnapshot(player, channel, "message.yumesumi_finance.enterprise.transfer_success", true);
     }
 
@@ -277,14 +310,35 @@ public class ServerEnterpriseService {
                 openDetail(player, sourceId, "message.yumesumi_finance.transfer.account_not_found");
                 return;
             }
-            long newTargetBalance = Math.addExact(target.balanceCents(), amountCents);
+            long newTargetBalance;
+            try {
+                newTargetBalance = Math.addExact(target.balanceCents(), amountCents);
+            } catch (ArithmeticException exception) {
+                openDetail(player, sourceId, "message.yumesumi_finance.transfer.too_large");
+                return;
+            }
             long newSourceBalance = source.balanceCents() - amountCents;
-            source.setBalanceCents(newSourceBalance);
-            target.setBalanceCents(newTargetBalance);
-            recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), target.id(), target.name(), note);
-            recordEnterprise(target, EnterpriseTransactionType.TRANSFER_IN, amountCents, newTargetBalance, player.getUUID(), player.getGameProfile().getName(), source.id(), source.name(), note);
-            enterprises.setDirtyAndTouch(source);
-            enterprises.setDirtyAndTouch(target);
+            long originalSourceBalance = source.balanceCents();
+            long originalTargetBalance = target.balanceCents();
+            EnterpriseTransactionRecord sourceRecord = null;
+            EnterpriseTransactionRecord targetRecord = null;
+            try {
+                source.setBalanceCents(newSourceBalance);
+                target.setBalanceCents(newTargetBalance);
+                sourceRecord = recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), target.id(), target.name(), note);
+                targetRecord = recordEnterprise(target, EnterpriseTransactionType.TRANSFER_IN, amountCents, newTargetBalance, player.getUUID(), player.getGameProfile().getName(), source.id(), source.name(), note);
+                enterprises.setDirtyAndTouch(source);
+                enterprises.setDirtyAndTouch(target);
+            } catch (RuntimeException exception) {
+                if (sourceRecord != null) source.removeTransaction(sourceRecord.id());
+                if (targetRecord != null) target.removeTransaction(targetRecord.id());
+                source.setBalanceCents(originalSourceBalance);
+                target.setBalanceCents(originalTargetBalance);
+                enterprises.setDirtyAndTouch(source);
+                enterprises.setDirtyAndTouch(target);
+                openDetail(player, sourceId, "message.yumesumi_finance.transfer.failed");
+                return;
+            }
             openDetail(player, sourceId, "message.yumesumi_finance.transfer.success");
             return;
         }
@@ -296,23 +350,63 @@ public class ServerEnterpriseService {
         }
         long newSourceBalance = source.balanceCents() - amountCents;
         if (BankSavedData.TREASURY_UUID.equals(target.owner())) {
-            source.setBalanceCents(newSourceBalance);
-            bankData.addToTreasury(amountCents, player.getGameProfile().getName(), note.isBlank() ? "企业转账至国库：" + source.code() : note);
-            recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME, note);
-            enterprises.setDirtyAndTouch(source);
+            long originalSourceBalance = source.balanceCents();
+            EnterpriseTransactionRecord sourceRecord = null;
+            boolean treasuryChanged = false;
+            try {
+                source.setBalanceCents(newSourceBalance);
+                bankData.addToTreasury(amountCents, player.getGameProfile().getName(), note.isBlank() ? "企业转账至国库：" + source.code() : note);
+                treasuryChanged = true;
+                sourceRecord = recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), BankSavedData.TREASURY_UUID, BankSavedData.TREASURY_NAME, note);
+                enterprises.setDirtyAndTouch(source);
+            } catch (RuntimeException exception) {
+                if (sourceRecord != null) source.removeTransaction(sourceRecord.id());
+                source.setBalanceCents(originalSourceBalance);
+                if (treasuryChanged) {
+                    bankData.addToTreasury(-amountCents, player.getGameProfile().getName(), "\u4f01\u4e1a\u8f6c\u8d26\u81f3\u56fd\u5e93\u56de\u6eda\uff1a" + source.code());
+                }
+                enterprises.setDirtyAndTouch(source);
+                openDetail(player, sourceId, "message.yumesumi_finance.transfer.failed");
+                return;
+            }
             openDetail(player, sourceId, "message.yumesumi_finance.transfer.success");
             return;
         }
-        if (bankData.find(target.owner()).isEmpty()) {
+        BankAccount receiver = bankData.find(target.owner()).orElse(null);
+        if (receiver == null) {
             openDetail(player, sourceId, "message.yumesumi_finance.transfer.account_not_found");
             return;
         }
-        long receiverBalance = Math.addExact(bankData.balanceOf(target.owner()), amountCents);
-        source.setBalanceCents(newSourceBalance);
-        bankData.setBalance(target.owner(), receiverBalance);
-        recordPersonal(target.owner(), TransactionType.TRANSFER_IN, amountCents, receiverBalance, source.name(), source.id(), note);
-        recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), target.owner(), target.displayName(), note);
-        enterprises.setDirtyAndTouch(source);
+        if (receiver.frozen()) {
+            openDetail(player, sourceId, "message.yumesumi_finance.account.frozen");
+            return;
+        }
+        long receiverBalance;
+        try {
+            receiverBalance = Math.addExact(bankData.balanceOf(target.owner()), amountCents);
+        } catch (ArithmeticException exception) {
+            openDetail(player, sourceId, "message.yumesumi_finance.transfer.too_large");
+            return;
+        }
+        long originalSourceBalance = source.balanceCents();
+        long originalReceiverBalance = bankData.balanceOf(target.owner());
+        TransactionRecord personalRecord = null;
+        EnterpriseTransactionRecord enterpriseRecord = null;
+        try {
+            source.setBalanceCents(newSourceBalance);
+            bankData.setBalance(target.owner(), receiverBalance);
+            personalRecord = recordPersonal(target.owner(), TransactionType.TRANSFER_IN, amountCents, receiverBalance, source.name(), source.id(), note);
+            enterpriseRecord = recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, newSourceBalance, player.getUUID(), player.getGameProfile().getName(), target.owner(), target.displayName(), note);
+            enterprises.setDirtyAndTouch(source);
+        } catch (RuntimeException exception) {
+            if (personalRecord != null) bankData.removeTransaction(personalRecord.id());
+            if (enterpriseRecord != null) source.removeTransaction(enterpriseRecord.id());
+            source.setBalanceCents(originalSourceBalance);
+            bankData.setBalance(target.owner(), originalReceiverBalance);
+            enterprises.setDirtyAndTouch(source);
+            openDetail(player, sourceId, "message.yumesumi_finance.transfer.failed");
+            return;
+        }
         openDetail(player, sourceId, "message.yumesumi_finance.transfer.success");
     }
 
@@ -396,6 +490,15 @@ public class ServerEnterpriseService {
                 openDetail(player, enterpriseId, "message.yumesumi_finance.enterprise.batch_target_invalid");
                 return;
             }
+            BankAccount receiver = bankData.find(target).orElse(null);
+            if (receiver == null) {
+                openDetail(player, enterpriseId, "message.yumesumi_finance.transfer.account_not_found");
+                return;
+            }
+            if (receiver.frozen()) {
+                openDetail(player, enterpriseId, "message.yumesumi_finance.account.frozen");
+                return;
+            }
             try {
                 Math.addExact(bankData.balanceOf(target), amountCents);
             } catch (ArithmeticException exception) {
@@ -404,24 +507,41 @@ public class ServerEnterpriseService {
             }
         }
         long sourceBalance = source.balanceCents() - total;
-        source.setBalanceCents(sourceBalance);
-        for (UUID target : targets) {
-            if (bankData.find(target).isEmpty()) {
-                bankData.setBalance(target, 0L);
+        long originalSourceBalance = source.balanceCents();
+        Map<UUID, Long> originalReceiverBalances = new HashMap<>();
+        List<TransactionRecord> personalRecords = new ArrayList<>();
+        List<EnterpriseTransactionRecord> enterpriseRecords = new ArrayList<>();
+        try {
+            source.setBalanceCents(sourceBalance);
+            for (UUID target : targets) {
+                long originalReceiverBalance = bankData.balanceOf(target);
+                long receiverBalance = Math.addExact(originalReceiverBalance, amountCents);
+                originalReceiverBalances.put(target, originalReceiverBalance);
+                bankData.setBalance(target, receiverBalance);
+                String targetName = source.member(target).map(com.yumesumi.finance.bank.enterprise.EnterpriseMember::playerName).orElse(target.toString());
+                personalRecords.add(recordPersonal(target, TransactionType.TRANSFER_IN, amountCents, receiverBalance, source.name(), source.id(), note));
+                enterpriseRecords.add(recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, source.balanceCents(), player.getUUID(), player.getGameProfile().getName(), target, targetName, note));
             }
-            long receiverBalance = Math.addExact(bankData.balanceOf(target), amountCents);
-            bankData.setBalance(target, receiverBalance);
-            String targetName = source.member(target).map(com.yumesumi.finance.bank.enterprise.EnterpriseMember::playerName).orElse(target.toString());
-            recordPersonal(target, TransactionType.TRANSFER_IN, amountCents, receiverBalance, source.name(), source.id(), note);
-            recordEnterprise(source, EnterpriseTransactionType.TRANSFER_OUT, amountCents, source.balanceCents(), player.getUUID(), player.getGameProfile().getName(), target, targetName, note);
+            enterprises.setDirtyAndTouch(source);
+        } catch (RuntimeException exception) {
+            personalRecords.forEach(record -> bankData.removeTransaction(record.id()));
+            enterpriseRecords.forEach(record -> source.removeTransaction(record.id()));
+            source.setBalanceCents(originalSourceBalance);
+            originalReceiverBalances.forEach(bankData::setBalance);
+            enterprises.setDirtyAndTouch(source);
+            openDetail(player, enterpriseId, "message.yumesumi_finance.transfer.failed");
+            return;
         }
-        enterprises.setDirtyAndTouch(source);
         openDetail(player, enterpriseId, "message.yumesumi_finance.transfer.success");
     }
 
     private Optional<EnterpriseAccount> requireVisible(ServerPlayer player, UUID enterpriseId) {
         return enterprises.findEnterprise(enterpriseId)
                 .filter(account -> account.containsMember(player.getUUID()));
+    }
+
+    private void pruneTerminalRegistrationAccess() {
+        TERMINAL_REGISTRATION_ACCESS.removeIf(playerId -> server.getPlayerList().getPlayer(playerId) == null);
     }
 
     private Optional<EnterpriseAccount> requireRole(ServerPlayer player, UUID enterpriseId, java.util.function.Predicate<EnterpriseRole> predicate) {
@@ -490,12 +610,11 @@ public class ServerEnterpriseService {
     }
 
     private List<Long> balanceSeries(EnterpriseAccount account) {
-        List<EnterpriseTransactionRecord> records = new ArrayList<>(account.transactions());
-        records.sort(Comparator.comparingLong(EnterpriseTransactionRecord::createdAt));
-        List<Long> result = records.stream()
-                .map(EnterpriseTransactionRecord::balanceAfterCents)
-                .skip(Math.max(0, records.size() - 12))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        List<EnterpriseTransactionRecord> records = account.recentTransactions(12);
+        List<Long> result = new ArrayList<>();
+        for (int i = records.size() - 1; i >= 0; i--) {
+            result.add(records.get(i).balanceAfterCents());
+        }
         if (result.isEmpty() || result.get(result.size() - 1) != account.balanceCents()) {
             result.add(account.balanceCents());
         }
@@ -503,15 +622,19 @@ public class ServerEnterpriseService {
         return result;
     }
 
-    private void recordEnterprise(EnterpriseAccount account, EnterpriseTransactionType type, long amountCents, long balanceAfter,
-                                  UUID operatorId, String operatorName, UUID counterpartyId, String counterpartyName, String note) {
-        account.appendTransaction(new EnterpriseTransactionRecord(UUID.randomUUID(), account.id(), type, amountCents, balanceAfter,
-                operatorId, operatorName, counterpartyId, counterpartyName, sanitizeNote(note), System.currentTimeMillis()));
+    private EnterpriseTransactionRecord recordEnterprise(EnterpriseAccount account, EnterpriseTransactionType type, long amountCents, long balanceAfter,
+                                                        UUID operatorId, String operatorName, UUID counterpartyId, String counterpartyName, String note) {
+        EnterpriseTransactionRecord record = new EnterpriseTransactionRecord(UUID.randomUUID(), account.id(), type, amountCents, balanceAfter,
+                operatorId, operatorName, counterpartyId, counterpartyName, sanitizeNote(note), System.currentTimeMillis());
+        account.appendTransaction(record);
+        return record;
     }
 
-    private void recordPersonal(UUID owner, TransactionType type, long amountCents, long balanceAfter,
-                                String counterpartyName, UUID counterpartyId, String note) {
-        bankData.append(new TransactionRecord(UUID.randomUUID(), owner, type, amountCents, balanceAfter,
-                System.currentTimeMillis(), counterpartyName, counterpartyId, sanitizeNote(note)));
+    private TransactionRecord recordPersonal(UUID owner, TransactionType type, long amountCents, long balanceAfter,
+                                             String counterpartyName, UUID counterpartyId, String note) {
+        TransactionRecord record = new TransactionRecord(UUID.randomUUID(), owner, type, amountCents, balanceAfter,
+                System.currentTimeMillis(), counterpartyName, counterpartyId, sanitizeNote(note));
+        bankData.append(record);
+        return record;
     }
 }

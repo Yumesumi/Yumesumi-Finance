@@ -8,6 +8,7 @@ import com.yumesumi.finance.client.gui.foundation.FinanceTheme;
 import com.yumesumi.finance.money.CashDenomination;
 import com.yumesumi.finance.money.CashDenominations;
 import com.yumesumi.finance.money.MoneyFormatter;
+import com.yumesumi.finance.network.ClientRequestIds;
 import com.yumesumi.finance.network.payload.BankSnapshotPayload;
 import com.yumesumi.finance.network.payload.BankTransactionView;
 import com.yumesumi.finance.network.payload.DepositAllRequestPayload;
@@ -103,8 +104,6 @@ public class BankScreen extends Screen {
     private int inboxPage;
     private final Set<UUID> selectedInbox = new HashSet<>();
     private boolean transferRequestPending;
-    private long requestCounter = System.nanoTime() & Long.MAX_VALUE;
-
     public BankScreen(BankSnapshotPayload payload) {
         super(Component.translatable("screen.yumesumi_finance.personal_bank"));
         apply(payload);
@@ -922,9 +921,7 @@ public class BankScreen extends Screen {
     private int narrowTop() { return (height - NARROW_H) / 2; }
 
     private long nextId() {
-        requestCounter++;
-        if (requestCounter <= 0) requestCounter = 1;
-        return requestCounter;
+        return ClientRequestIds.next();
     }
 
     public static final class TransferLoadingScreen extends Screen {

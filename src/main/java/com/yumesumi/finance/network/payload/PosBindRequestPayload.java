@@ -7,7 +7,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 
-public record PosBindRequestPayload(InteractionHand hand, String enterpriseCode, boolean clear) implements CustomPacketPayload {
+public record PosBindRequestPayload(long requestId, InteractionHand hand, String enterpriseCode, boolean clear) implements CustomPacketPayload {
     public static final Type<PosBindRequestPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "pos_bind"));
     public static final StreamCodec<RegistryFriendlyByteBuf, PosBindRequestPayload> STREAM_CODEC =
@@ -25,12 +25,13 @@ public record PosBindRequestPayload(InteractionHand hand, String enterpriseCode,
     }
 
     private static void write(RegistryFriendlyByteBuf buf, PosBindRequestPayload payload) {
+        buf.writeVarLong(payload.requestId());
         buf.writeEnum(payload.hand());
         buf.writeUtf(payload.enterpriseCode(), 16);
         buf.writeBoolean(payload.clear());
     }
 
     private static PosBindRequestPayload read(RegistryFriendlyByteBuf buf) {
-        return new PosBindRequestPayload(buf.readEnum(InteractionHand.class), buf.readUtf(16), buf.readBoolean());
+        return new PosBindRequestPayload(buf.readVarLong(), buf.readEnum(InteractionHand.class), buf.readUtf(16), buf.readBoolean());
     }
 }

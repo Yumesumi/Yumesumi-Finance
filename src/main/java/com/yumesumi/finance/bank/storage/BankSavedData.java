@@ -86,6 +86,7 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
         for (int i = 0; i < transactionsTag.size(); i++) {
             readTransaction(transactionsTag.getCompound(i)).ifPresent(data::addTransaction);
         }
+        data.pruneAllOwners();
 
         ListTag treasuryTransactionsTag = tag.getList("treasury_transactions", Tag.TAG_COMPOUND);
         for (int i = 0; i < treasuryTransactionsTag.size(); i++) {
@@ -219,10 +220,7 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
     }
 
     public List<TreasuryTransactionRecord> treasuryTransactions() {
-        return treasuryTransactions.stream()
-                .sorted(Comparator.comparingLong(TreasuryTransactionRecord::createdAt).reversed())
-                .limit(10_000)
-                .toList();
+        return List.copyOf(treasuryTransactions.subList(0, Math.min(10_000, treasuryTransactions.size())));
     }
 
     @Override
@@ -332,25 +330,56 @@ public class BankSavedData extends SavedData implements BankAccountRepository, T
         transactionsByOwner.computeIfAbsent(record.owner(), ignored -> new ArrayList<>()).add(record);
     }
 
+    public void removeTransaction(UUID recordId) {
+        if (recordId == null) return;
+        TransactionRecord removed = null;
+        for (TransactionRecord record : transactions) {
+            if (record.id().equals(recordId)) {
+                removed = record;
+                break;
+            }
+        }
+        if (removed == null) return;
+        transactions.remove(removed);
+        List<TransactionRecord> ownerTx = transactionsByOwner.get(removed.owner());
+        if (ownerTx != null) {
+            ownerTx.removeIf(record -> record.id().equals(recordId));
+            if (ownerTx.isEmpty()) transactionsByOwner.remove(removed.owner());
+        }
+        setDirty();
+    }
+
     private void addTreasuryTransaction(TreasuryTransactionRecord record) {
-        treasuryTransactions.add(record);
-        treasuryTransactions.sort(Comparator.comparingLong(TreasuryTransactionRecord::createdAt).reversed());
+        int index = 0;
+        while (index < treasuryTransactions.size() && treasuryTransactions.get(index).createdAt() >= record.createdAt()) {
+            index++;
+        }
+        treasuryTransactions.add(index, record);
         while (treasuryTransactions.size() > 10_000) {
             treasuryTransactions.remove(treasuryTransactions.size() - 1);
         }
     }
 
-    private void pruneOwner(UUID owner) {
+    private boolean pruneOwner(UUID owner) {
         List<TransactionRecord> ownerTx = transactionsByOwner.get(owner);
-        if (ownerTx == null) return;
+        if (ownerTx == null) return false;
         int extra = ownerTx.size() - TransactionRepository.MAX_VISIBLE_RECORDS;
-        if (extra <= 0) return;
+        if (extra <= 0) return false;
         List<TransactionRecord> oldest = ownerTx.stream()
                 .sorted(Comparator.comparingLong(TransactionRecord::createdGameTime))
                 .limit(extra).toList();
         transactions.removeAll(oldest);
         ownerTx.removeAll(oldest);
         if (ownerTx.isEmpty()) transactionsByOwner.remove(owner);
+        return true;
+    }
+
+    private void pruneAllOwners() {
+        boolean pruned = false;
+        for (UUID owner : List.copyOf(transactionsByOwner.keySet())) {
+            pruned |= pruneOwner(owner);
+        }
+        if (pruned) setDirty();
     }
 
     private static boolean matches(TransactionRecord record, String searchText) {

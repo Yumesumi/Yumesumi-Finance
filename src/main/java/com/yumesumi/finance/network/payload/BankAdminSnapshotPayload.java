@@ -20,13 +20,15 @@ public record BankAdminSnapshotPayload(
 ) implements CustomPacketPayload {
     public static final Type<BankAdminSnapshotPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "bank_admin_snapshot"));
+    private static final int MAX_ACCOUNT_VIEWS = 4_096;
+    private static final int MAX_TREASURY_TRANSACTIONS = 10_000;
     public static final StreamCodec<RegistryFriendlyByteBuf, BankAdminSnapshotPayload> STREAM_CODEC =
             StreamCodec.of(BankAdminSnapshotPayload::write, BankAdminSnapshotPayload::read);
 
     public BankAdminSnapshotPayload {
-        accounts = List.copyOf(accounts);
+        accounts = List.copyOf((accounts == null ? List.<BankAccountView>of() : accounts).stream().limit(MAX_ACCOUNT_VIEWS).toList());
         if (treasuryBalance == null) treasuryBalance = BigInteger.ZERO;
-        treasuryTransactions = List.copyOf(treasuryTransactions == null ? List.of() : treasuryTransactions);
+        treasuryTransactions = List.copyOf((treasuryTransactions == null ? List.<TreasuryTransactionView>of() : treasuryTransactions).stream().limit(MAX_TREASURY_TRANSACTIONS).toList());
         if (messageKey == null) messageKey = "";
     }
 
@@ -47,16 +49,18 @@ public record BankAdminSnapshotPayload(
     }
 
     private static BankAdminSnapshotPayload read(RegistryFriendlyByteBuf buf) {
-        int size = buf.readVarInt();
-        List<BankAccountView> accounts = new ArrayList<>(Math.min(size, 4096));
+        int size = Math.max(0, buf.readVarInt());
+        List<BankAccountView> accounts = new ArrayList<>(Math.min(size, MAX_ACCOUNT_VIEWS));
         for (int i = 0; i < size; i++) {
-            accounts.add(BankAccountView.read(buf));
+            BankAccountView view = BankAccountView.read(buf);
+            if (i < MAX_ACCOUNT_VIEWS) accounts.add(view);
         }
         BigInteger treasury = new BigInteger(buf.readUtf(256));
-        int treasurySize = buf.readVarInt();
-        List<TreasuryTransactionView> treasuryTransactions = new ArrayList<>(Math.min(treasurySize, 10_000));
+        int treasurySize = Math.max(0, buf.readVarInt());
+        List<TreasuryTransactionView> treasuryTransactions = new ArrayList<>(Math.min(treasurySize, MAX_TREASURY_TRANSACTIONS));
         for (int i = 0; i < treasurySize; i++) {
-            treasuryTransactions.add(TreasuryTransactionView.read(buf));
+            TreasuryTransactionView view = TreasuryTransactionView.read(buf);
+            if (i < MAX_TREASURY_TRANSACTIONS) treasuryTransactions.add(view);
         }
         String messageKey = buf.readUtf(128);
         return new BankAdminSnapshotPayload(accounts, treasury, treasuryTransactions, messageKey);

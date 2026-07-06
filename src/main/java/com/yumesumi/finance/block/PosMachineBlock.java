@@ -23,9 +23,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 public class PosMachineBlock extends Block implements EntityBlock {
@@ -74,15 +77,17 @@ public class PosMachineBlock extends Block implements EntityBlock {
     }
 
     @Override
-    public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-        if (!level.isClientSide() && !player.isCreative()) {
-            ItemStack drop = new ItemStack(this);
-            if (level.getBlockEntity(pos) instanceof PosMachineBlockEntity posMachine && !posMachine.enterpriseCode().isBlank()) {
-                drop.set(ModDataComponents.POS_MACHINE.get(), new PosMachineData(posMachine.enterpriseCode()));
+    protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        List<ItemStack> drops = super.getDrops(state, params);
+        BlockEntity blockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (blockEntity instanceof PosMachineBlockEntity posMachine && !posMachine.enterpriseCode().isBlank()) {
+            for (ItemStack drop : drops) {
+                if (drop.is(asItem())) {
+                    drop.set(ModDataComponents.POS_MACHINE.get(), new PosMachineData(posMachine.enterpriseCode()));
+                }
             }
-            popResource(level, pos, drop);
         }
-        return super.playerWillDestroy(level, pos, state, player);
+        return drops;
     }
 
     @Override

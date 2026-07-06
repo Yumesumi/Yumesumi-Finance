@@ -23,12 +23,13 @@ public record EnterpriseSnapshotPayload(
 ) implements CustomPacketPayload {
     public static final Type<EnterpriseSnapshotPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(YumesumiFinance.MODID, "enterprise_snapshot"));
+    private static final int MAX_ENTERPRISE_SUMMARIES = 256;
     public static final StreamCodec<RegistryFriendlyByteBuf, EnterpriseSnapshotPayload> STREAM_CODEC =
             StreamCodec.of(EnterpriseSnapshotPayload::write, EnterpriseSnapshotPayload::read);
 
     public EnterpriseSnapshotPayload {
         mode = mode == null ? EnterpriseScreenMode.LIST : mode;
-        enterprises = List.copyOf(enterprises);
+        enterprises = List.copyOf((enterprises == null ? List.<EnterpriseSummaryView>of() : enterprises).stream().limit(MAX_ENTERPRISE_SUMMARIES).toList());
         checkedCode = checkedCode == null ? "" : checkedCode;
         message = message == null ? Component.empty() : message;
         messageKey = messageKey == null ? "" : messageKey;
@@ -53,8 +54,11 @@ public record EnterpriseSnapshotPayload(
     private static EnterpriseSnapshotPayload read(RegistryFriendlyByteBuf buf) {
         EnterpriseScreenMode mode = buf.readEnum(EnterpriseScreenMode.class);
         int size = Math.max(0, buf.readVarInt());
-        List<EnterpriseSummaryView> enterprises = new ArrayList<>(Math.min(size, 256));
-        for (int i = 0; i < size; i++) enterprises.add(EnterpriseSummaryView.read(buf));
+        List<EnterpriseSummaryView> enterprises = new ArrayList<>(Math.min(size, MAX_ENTERPRISE_SUMMARIES));
+        for (int i = 0; i < size; i++) {
+            EnterpriseSummaryView enterprise = EnterpriseSummaryView.read(buf);
+            if (i < MAX_ENTERPRISE_SUMMARIES) enterprises.add(enterprise);
+        }
         EnterpriseDetailView detail = buf.readBoolean() ? EnterpriseDetailView.read(buf) : null;
         String checkedCode = buf.readUtf(16);
         boolean codeAvailable = buf.readBoolean();

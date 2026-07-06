@@ -26,6 +26,7 @@ public class EnterpriseSavedData extends SavedData {
     private static final String DATA_NAME = "yumesumi_finance_enterprises";
     public static final long REGISTRATION_FEE_CENTS = 100_000L;
     public static final int MAX_OWNER_ENTERPRISES = 10;
+    public static final int MAX_INBOX_MESSAGES = 500;
 
     private final Map<UUID, EnterpriseAccount> enterprises = new LinkedHashMap<>();
     private final Map<String, UUID> enterpriseByCode = new HashMap<>();
@@ -61,6 +62,7 @@ public class EnterpriseSavedData extends SavedData {
                 readInboxMessage(messagesTag.getCompound(j)).ifPresent(messages::add);
             }
             messages.sort(Comparator.comparingLong(InboxMessage::createdAt).reversed());
+            pruneInbox(messages);
             if (!messages.isEmpty()) data.inboxByPlayer.put(owner, messages);
         }
 
@@ -211,6 +213,7 @@ public class EnterpriseSavedData extends SavedData {
     public void addInboxMessage(UUID playerId, InboxMessage message) {
         inboxByPlayer.computeIfAbsent(playerId, ignored -> new ArrayList<>()).add(message);
         inboxByPlayer.get(playerId).sort(Comparator.comparingLong(InboxMessage::createdAt).reversed());
+        pruneInbox(inboxByPlayer.get(playerId));
         setDirty();
     }
 
@@ -277,6 +280,12 @@ public class EnterpriseSavedData extends SavedData {
         }
         tag.put("transactions", transactionsTag);
         return tag;
+    }
+
+    private static void pruneInbox(List<InboxMessage> messages) {
+        while (messages.size() > MAX_INBOX_MESSAGES) {
+            messages.remove(messages.size() - 1);
+        }
     }
 
     private static Optional<EnterpriseAccount> readEnterprise(CompoundTag tag) {

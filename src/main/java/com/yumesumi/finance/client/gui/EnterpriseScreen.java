@@ -7,6 +7,7 @@ import com.yumesumi.finance.client.gui.foundation.FinanceLineChart;
 import com.yumesumi.finance.client.gui.foundation.FinanceRender;
 import com.yumesumi.finance.client.gui.foundation.FinanceTheme;
 import com.yumesumi.finance.money.MoneyFormatter;
+import com.yumesumi.finance.network.ClientRequestIds;
 import com.yumesumi.finance.network.payload.EnterpriseDetailView;
 import com.yumesumi.finance.network.payload.EnterpriseMemberView;
 import com.yumesumi.finance.network.payload.EnterpriseRequestPayload;
@@ -95,7 +96,6 @@ public class EnterpriseScreen extends Screen {
     private int listPage;
     private int ledgerPage;
     private int memberPage;
-    private long requestCounter = System.nanoTime() & Long.MAX_VALUE;
     private int disbandCountdown = -1;
     private boolean disbandReady;
 
@@ -769,7 +769,7 @@ public class EnterpriseScreen extends Screen {
                         || tx.type().name().toLowerCase(Locale.ROOT).contains(search)
                         || MoneyFormatter.format(tx.amountCents()).toLowerCase(Locale.ROOT).contains(search))
                 .sorted(comparator)
-                .limit(10_000)
+                .limit(1_000)
                 .toList();
     }
 
@@ -940,9 +940,7 @@ public class EnterpriseScreen extends Screen {
     }
 
     private long nextId() {
-        requestCounter++;
-        if (requestCounter <= 0) requestCounter = 1;
-        return requestCounter;
+        return ClientRequestIds.next();
     }
 
     private int left() { return (width - panelWidth()) / 2; }

@@ -1,6 +1,7 @@
 package com.yumesumi.finance.client.gui;
 
 import com.yumesumi.finance.bank.enterprise.EnterpriseAccount;
+import com.yumesumi.finance.network.ClientRequestIds;
 import com.yumesumi.finance.network.payload.PosBindRequestPayload;
 import java.util.Locale;
 import net.minecraft.client.gui.GuiGraphics;
@@ -22,7 +23,6 @@ public class PosMachineConfigScreen extends Screen {
     private final InteractionHand hand;
     private final String initialCode;
     private EditBox codeBox;
-
     public PosMachineConfigScreen(InteractionHand hand, String enterpriseCode) {
         super(Component.translatable("screen.yumesumi_finance.pos.title"));
         this.hand = hand == null ? InteractionHand.MAIN_HAND : hand;
@@ -85,12 +85,16 @@ public class PosMachineConfigScreen extends Screen {
         } catch (IllegalArgumentException exception) {
             return;
         }
-        PacketDistributor.sendToServer(new PosBindRequestPayload(hand, code, false));
+        PacketDistributor.sendToServer(new PosBindRequestPayload(nextId(), hand, code, false));
         onClose();
     }
 
     private void unbind() {
-        PacketDistributor.sendToServer(new PosBindRequestPayload(hand, "", true));
+        PacketDistributor.sendToServer(new PosBindRequestPayload(nextId(), hand, "", true));
         onClose();
+    }
+
+    private long nextId() {
+        return ClientRequestIds.next();
     }
 }
